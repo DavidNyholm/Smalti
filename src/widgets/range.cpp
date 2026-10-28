@@ -147,9 +147,9 @@ void ProgressBar::paint(Painter& p) {
   const float phase = static_cast<float>(frame_time_ns() % kSweepPeriodNs) / static_cast<float>(kSweepPeriodNs);
   const float seg = track.width * kSweepWidth;
   const float x = track.x - seg + (track.width + seg) * phase;
-  p.push_clip(track);
-  p.fill_rounded_rect({x, track.y, seg, track.height}, radius, th.accent);
-  p.pop_clip();
+  // Cut to the track, keeping round ends where the segment meets the track's own ends.
+  const float x0 = std::max(x, track.x), x1 = std::min(x + seg, track.right());
+  if (x1 > x0) p.fill_rounded_rect({x0, track.y, x1 - x0, track.height}, std::min(radius, (x1 - x0) * 0.5f), th.accent);
   keep_animating();  // one more frame, for as long as the bar is drawn
 }
 

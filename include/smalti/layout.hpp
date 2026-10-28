@@ -9,7 +9,7 @@ namespace smalti {
 
 struct StackOptions {
   float spacing = 0;
-  Insets padding;
+  Insets padding{};
   Align align = Align::stretch;  // default placement of children across the stack
   Align justify = Align::start;  // where children sit along the stack when none stretches
 };
@@ -64,7 +64,7 @@ struct GridOptions {
   std::vector<GridTrack> columns{GridTrack::fit(), GridTrack::stretch()};
   float column_spacing = 12;
   float row_spacing = 8;
-  Insets padding;
+  Insets padding{};
 };
 
 // Children fill the cells left to right, then down; set_column_span() widens one.

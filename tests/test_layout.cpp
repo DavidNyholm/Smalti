@@ -9,7 +9,7 @@ namespace {
 // A widget with a fixed preferred size, so layouts can be checked exactly.
 class Box : public Widget {
  public:
-  explicit Box(float w, float h) : size_{w, h} {}
+  Box(int w, int h) : size_{static_cast<float>(w), static_cast<float>(h)} {}
   Size measure(Size) override { return size_; }
 
  private:
