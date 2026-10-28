@@ -31,17 +31,21 @@ inline smalti::AppOptions headless(const smalti::Theme* theme = &smalti::theme_d
   return o;
 }
 
-// Counts heap allocations on this thread while enabled (operator new is replaced in alloc.cpp).
+// Counts heap allocations, and the bytes they ask for, while enabled (operator new is replaced
+// in main.cpp).
 namespace alloc_count {
 std::atomic<long long>& count();
+std::atomic<long long>& bytes();
 std::atomic<bool>& enabled();
 struct Scope {
   Scope() {
     count() = 0;
+    bytes() = 0;
     enabled() = true;
   }
   ~Scope() { enabled() = false; }
   long long allocations() const { return count().load(); }
+  long long allocated_bytes() const { return bytes().load(); }
 };
 }  // namespace alloc_count
 

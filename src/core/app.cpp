@@ -28,20 +28,30 @@ AppState::~AppState() = default;
 
 void AppState::on_wake() {
   // A posted function that runs a nested event loop (a native message box) can be woken into
-  // again; the drain further up the stack picks up the new work afterwards, so posted work
-  // always runs in the order it was posted.
+  // again; the work waits for the drain further up the stack, so it always runs in the order it
+  // was posted.
   if (draining_posted) return;
-  draining_posted = true;
-  for (;;) {
-    std::vector<Callback<void()>> work;
-    {
-      const std::lock_guard lock(posted_mutex);
-      work.swap(posted);
-    }
-    if (work.empty()) break;
+  std::vector<Callback<void()>> work;
+  {
+    const std::lock_guard lock(posted_mutex);
+    work.swap(posted);
+  }
+  {
+    draining_posted = true;
+    struct Reset {
+      bool& flag;
+      ~Reset() { flag = false; }
+    } reset{draining_posted};
     for (auto& fn : work) guarded([&] { fn(); });
   }
-  draining_posted = false;
+  // Only what was posted before this wake runs now. What came in meanwhile (a long job posting
+  // its next piece) runs on the next wake, after input and frames have had their turn.
+  bool more = false;
+  {
+    const std::lock_guard lock(posted_mutex);
+    more = !posted.empty();
+  }
+  if (more && backend) backend->wake();
 }
 
 void AppState::stop_with(std::exception_ptr e) {
@@ -125,6 +135,7 @@ App::~App() {
 }
 
 Ref<Window> App::open_window(const WindowOptions& options) {
+  detail::Registry::instance().check_thread();
   auto window = std::make_unique<Window>(*this, options);
   const Ref<Window> ref = Ref<Window>::from_id(window->id());
   window->state().native->show();
@@ -133,6 +144,7 @@ Ref<Window> App::open_window(const WindowOptions& options) {
 }
 
 int App::run() {
+  detail::Registry::instance().check_thread();
   detail::AppState& s = *state_;
   if (s.running) detail::contract_violation("App::run() was called while it is already running");
   s.flush_removals();
@@ -156,6 +168,7 @@ int App::run() {
 }
 
 void App::quit(int exit_code) {
+  detail::Registry::instance().check_thread();
   state_->exit_code = exit_code;
   state_->backend->quit();
 }
@@ -169,6 +182,7 @@ void App::post(Callback<void()> fn) {
 }
 
 void App::set_theme(const Theme& theme) {
+  detail::Registry::instance().check_thread();
   state_->theme = theme;
   for (auto& w : state_->windows) {
     w->state().native->set_dark_frame(theme.dark);
@@ -176,9 +190,13 @@ void App::set_theme(const Theme& theme) {
   }
 }
 
-const Theme& App::theme() const { return state_->theme; }
+const Theme& App::theme() const {
+  detail::Registry::instance().check_thread();
+  return state_->theme;
+}
 
 MemoryStats App::memory_stats() const {
+  detail::Registry::instance().check_thread();
   MemoryStats m;
   m.widgets = detail::Registry::instance().live();
   m.glyph_cache_bytes = state_->glyphs.bytes();

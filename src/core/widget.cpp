@@ -57,6 +57,11 @@ void Widget::adopt(std::unique_ptr<Widget> child) {
     detail::contract_violation("add<T>() was called on a widget that takes no children; add to a Column, Row, "
                                "Grid, Card or Window instead");
   }
+  if (const auto* ws = detail::window_state_of(*this); ws && ws->in_draw) {
+    detail::contract_violation(
+        "add<T>() was called while the window was laying out or painting (from measure, "
+        "arrange or paint); add widgets from an event handler or App::post instead");
+  }
   child->parent_ = this;
   attach(*child, window_);
   children_.push_back(std::move(child));
@@ -92,6 +97,7 @@ void Widget::set_column_span(int columns) {
 
 void Widget::set_visible(bool visible) {
   if (visible_ == visible) return;
+  const detail::DispatchScope scope(detail::app_state());  // the hooks below must not free this
   visible_ = visible;
   if (!visible) {
     if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);
@@ -101,6 +107,7 @@ void Widget::set_visible(bool visible) {
 
 void Widget::set_enabled(bool enabled) {
   if (enabled_ == enabled) return;
+  const detail::DispatchScope scope(detail::app_state());  // the hooks below must not free this
   enabled_ = enabled;
   if (!enabled) {
     if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);
@@ -116,7 +123,10 @@ bool Widget::enabled() const {
 }
 
 void Widget::focus() {
-  if (auto* ws = detail::window_state_of(*this); ws && focusable() && visible_) ws->focus(this);
+  auto* ws = detail::window_state_of(*this);
+  if (!ws || !focusable() || !detail::eligible(*this)) return;
+  const detail::DispatchScope scope(detail::app_state());
+  ws->focus(this);
 }
 
 bool Widget::has_focus() const {

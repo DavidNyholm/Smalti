@@ -255,28 +255,39 @@ void X11Window::set_dark_frame(bool dark) {
 void X11Window::set_cursor(Cursor c) { XDefineCursor(display_, window_, backend_.cursor(c)); }
 
 void X11Window::resize(int w, int h) {
-  width_ = std::max(1, w);
-  height_ = std::max(1, h);
-  pixels_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0xFF000000u);
+  const int new_w = std::max(1, w), new_h = std::max(1, h);
+  // The new pixels and image are made before the old ones go: if either fails, the pixels the
+  // core is drawing into stay valid.
+  std::vector<uint32_t> pixels(static_cast<size_t>(new_w) * static_cast<size_t>(new_h),
+                               0xFF000000u);
+  const int screen = DefaultScreen(display_);
+  // 32 bits per pixel, depth 24: on a little-endian machine with the usual masks this is
+  // exactly the core's 0xAARRGGBB layout, so no conversion is needed.
+  XImage* image = XCreateImage(display_, DefaultVisual(display_, screen),
+                               static_cast<unsigned>(DefaultDepth(display_, screen)), ZPixmap, 0,
+                               reinterpret_cast<char*>(pixels.data()), static_cast<unsigned>(new_w),
+                               static_cast<unsigned>(new_h), kBitsPerPixel, 0);
+  if (!image)
+    throw std::runtime_error(
+        "smalti: XCreateImage failed (a 24-bit TrueColor display is required)");
+  // The layout the server will read must be the core's: 32-bit pixels in this machine's byte
+  // order, rows packed. Anything else would put garbage on screen.
+  const int native_order = std::endian::native == std::endian::little ? LSBFirst : MSBFirst;
+  if (image->bits_per_pixel != kBitsPerPixel || image->byte_order != native_order ||
+      image->bytes_per_line != new_w * static_cast<int>(sizeof(uint32_t))) {
+    image->data = nullptr;  // the pixels belong to `pixels`, not to Xlib
+    XDestroyImage(image);
+    throw std::runtime_error(
+        "smalti: the X server's image format is not 32-bit pixels in host byte order");
+  }
   if (image_) {
     image_->data = nullptr;
     XDestroyImage(image_);
   }
-  const int screen = DefaultScreen(display_);
-  // 32 bits per pixel, depth 24: on a little-endian machine with the usual masks this is
-  // exactly the core's 0xAARRGGBB layout, so no conversion is needed.
-  image_ = XCreateImage(display_, DefaultVisual(display_, screen), static_cast<unsigned>(DefaultDepth(display_, screen)),
-                        ZPixmap, 0, reinterpret_cast<char*>(pixels_.data()), static_cast<unsigned>(width_),
-                        static_cast<unsigned>(height_), kBitsPerPixel, 0);
-  if (!image_) throw std::runtime_error("smalti: XCreateImage failed (a 24-bit TrueColor display is required)");
-  // The layout the server will read must be the core's: 32-bit pixels in this machine's byte
-  // order, rows packed. Anything else would put garbage on screen.
-  const int native_order = std::endian::native == std::endian::little ? LSBFirst : MSBFirst;
-  if (image_->bits_per_pixel != kBitsPerPixel || image_->byte_order != native_order ||
-      image_->bytes_per_line != width_ * static_cast<int>(sizeof(uint32_t))) {
-    throw std::runtime_error(
-        "smalti: the X server's image format is not 32-bit pixels in host byte order");
-  }
+  image_ = image;
+  pixels_.swap(pixels);  // the image's data pointer moves with the storage
+  width_ = new_w;
+  height_ = new_h;
   events_.on_resize(width_, height_, scale_);
 }
 
@@ -357,6 +368,11 @@ void X11Window::handle(XEvent& e) {
     case FocusOut:
       if (e.type == FocusOut) keys_down_.clear();
       events_.on_focus(e.type == FocusIn);
+      break;
+    case UnmapNotify:
+      // An unmapped (minimised) window loses the pointer grab the server made for a press, and
+      // the release may happen elsewhere: the press is over.
+      events_.on_capture_lost();
       break;
     case ClientMessage:
       if (static_cast<Atom>(e.xclient.data.l[0]) == backend_.atom("WM_DELETE_WINDOW")) events_.on_close_request();

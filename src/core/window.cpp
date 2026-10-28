@@ -41,9 +41,11 @@ void paint_tree(Widget& w, Painter& p, const RectI& clip, float scale) {
   if (!w.visible()) return;
   const float o = w.overflow();
   const Rect b = w.bounds();
-  if (!overlaps(to_device({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o}, scale), clip)) return;
-  w.paint(p);
-  for (auto& child : w.children()) paint_tree(*child, p, clip, scale);
+  // Missing the clip skips only this widget's own painting: a child may paint further out than
+  // its parent does (a card's shadow, inside a row), so the children are still visited.
+  if (overlaps(to_device({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o}, scale), clip))
+    w.paint(p);
+  for (size_t i = 0; i < w.children().size(); ++i) paint_tree(*w.children()[i], p, clip, scale);
 }
 
 Widget* hit(Widget& w, Point p) {
@@ -54,17 +56,6 @@ Widget* hit(Widget& w, Point p) {
   }
   return &w;
 }
-
-// Visible all the way up: hiding a container hides what is in it.
-bool shown(const Widget& w) {
-  for (const Widget* x = &w; x; x = Tree::parent_of(*x)) {
-    if (!x->visible()) return false;
-  }
-  return true;
-}
-
-// Whether input may still reach w.
-bool eligible(const Widget& w) { return w.enabled() && shown(w); }
 
 bool within(const Widget& root, const Widget* w) {
   for (; w; w = Tree::parent_of(*w)) {
@@ -80,6 +71,15 @@ void collect_focusable(Widget& w, std::vector<Widget*>& out) {
 }
 
 }  // namespace
+
+bool shown(const Widget& w) {
+  for (const Widget* x = &w; x; x = Tree::parent_of(*x)) {
+    if (!x->visible()) return false;
+  }
+  return true;
+}
+
+bool eligible(const Widget& w) { return w.enabled() && shown(w); }
 
 std::unique_ptr<Widget> Tree::detach(Widget& w) {
   Widget* parent = w.parent_;
@@ -174,6 +174,25 @@ void WindowState::animate_until(WidgetId id, int64_t end_ns) {
 }
 
 void WindowState::draw(int64_t frame_time_ns) {
+  // A paint() that runs a nested event loop (a native message box) must not get a frame of this
+  // window drawn inside the one it is part of: that one waits until this frame is done.
+  if (in_draw) {
+    request_frame();
+    return;
+  }
+  in_draw = true;
+  try {
+    draw_frame(frame_time_ns);
+  } catch (...) {
+    in_draw = false;
+    drawing.clear();
+    invalidate_layout();  // the frame was cut short: lay out and draw all of it again
+    throw;
+  }
+  in_draw = false;
+}
+
+void WindowState::draw_frame(int64_t frame_time_ns) {
   frame_time = frame_time_ns;
   // Every animating widget is drawn on every frame until its animation has ended; the frame at
   // or after the end draws its final state, and then it stops costing anything.
@@ -284,7 +303,12 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
     const Point p{device.x / scale, device.y / scale};
     last_mouse = p;
     MouseEvent e{down ? MouseEvent::Kind::press : MouseEvent::Kind::release, p, button, mods, {}, clicks};
+    const bool pressing = pressed != WidgetId{};
     if (!down) {
+      if (!pressing || button != pressed_button) {
+        set_hovered(hit_test(p));  // only the button that started the press ends it
+        return;
+      }
       Widget* captured = find(pressed);
       if (captured && !eligible(*captured)) {
         cancel_press();
@@ -299,6 +323,7 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
       set_hovered(hit_test(p));
       return;
     }
+    if (pressing) return;  // one press at a time: another button waits for it to end
     if (keyboard_mode) {
       keyboard_mode = false;  // the pointer is in use: hide the focus ring
       if (Widget* f = find(focused)) f->invalidate();
@@ -310,10 +335,13 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
     }
     focus(focus_target);
     for (Widget* w = target; w; w = Tree::parent_of(*w)) {
-      if (w->enabled() && w->on_mouse(e)) {
+      if (eligible(*w) && w->on_mouse(e)) {
         pressed = w->id();
+        pressed_button = button;
         native->capture_mouse(true);
         w->invalidate();
+        // Its own press may have disabled or hidden it (a callback did): then the press is over.
+        if (!eligible(*w)) cancel_press();
         break;
       }
     }
@@ -419,8 +447,8 @@ Size Window::measure(Size available) { return available; }
 
 void Window::arrange(Rect bounds) {
   detail::Tree::set_bounds(*this, bounds);
-  for (auto& child : children()) {
-    if (child->visible()) child->arrange(bounds);
+  for (size_t i = 0; i < children().size(); ++i) {
+    if (children()[i]->visible()) children()[i]->arrange(bounds);
   }
 }
 

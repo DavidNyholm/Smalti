@@ -107,6 +107,61 @@ MUTATIONS = [
             )
         ],
     ),
+    (
+        "core/widget.cpp",
+        "a setter's cancelled press can free its widget mid-cancel",
+        [
+            (
+                "  if (enabled_ == enabled) return;\n  const detail::DispatchScope scope(detail::app_state());  // the hooks below must not free this",
+                "  if (enabled_ == enabled) return;",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "a paint that pumps a nested frame gets a frame drawn inside it",
+        [("  if (in_draw) {\n    request_frame();\n    return;\n  }", "")],
+    ),
+    (
+        "core/window.cpp",
+        "another mouse button ends the press",
+        [("      if (!pressing || button != pressed_button) {", "      if (!pressing) {")],
+    ),
+    (
+        "core/window.cpp",
+        "the children of a parent outside the repaint are skipped",
+        [
+            (
+                "  if (overlaps(to_device({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o}, scale), clip))\n    w.paint(p);",
+                "  if (!overlaps(to_device({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o}, scale), clip)) return;\n  w.paint(p);",
+            )
+        ],
+    ),
+    (
+        "core/layout.cpp",
+        "a spanning child squeezes a stretch column to nothing",
+        [
+            (
+                "    if (stretches || need <= have || growable == 0) continue;",
+                "    if (need <= have || growable == 0) continue;",
+            )
+        ],
+    ),
+    (
+        "render/font.cpp",
+        "kerning sums beyond 16 bits change once cached",
+        [("  total = std::clamp(total, int{INT16_MIN}, int{INT16_MAX});", "")],
+    ),
+    (
+        "render/text.cpp",
+        "overlong UTF-8 forms and surrogates are accepted",
+        [("  if (cp < kMinForExtraBytes[extra] ||", "  if (false ||")],
+    ),
+    (
+        "render/text.cpp",
+        "a giant glyph is rasterized whatever it costs",
+        [("      within_raster_limit(outline_, t)\n", "      true\n")],
+    ),
     # Layout
     (
         "core/layout.cpp",

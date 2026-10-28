@@ -103,6 +103,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_memory.cpp
     tests/test_raster.cpp
     tests/test_review.cpp
+    tests/test_review2.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_widgets.cpp)
@@ -120,8 +121,13 @@ if(SMALTI_INSTALL)
   install(EXPORT smaltiTargets NAMESPACE smalti:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/smalti)
   write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/smaltiConfigVersion.cmake"
     VERSION ${PROJECT_VERSION} COMPATIBILITY SameMinorVersion)
+  # A consumer needs what the installed library links: X11 only where that backend was built.
+  set(smalti_config_deps "include(CMakeFindDependencyMacro)\nfind_dependency(Threads)\n")
+  if(UNIX AND NOT APPLE AND NOT SMALTI_HEADLESS_ONLY)
+    string(APPEND smalti_config_deps "find_dependency(X11)\n")
+  endif()
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfig.cmake"
-    "include(CMakeFindDependencyMacro)\nfind_dependency(Threads)\nif(UNIX AND NOT APPLE)\n  find_dependency(X11)\nendif()\ninclude(\"\${CMAKE_CURRENT_LIST_DIR}/smaltiTargets.cmake\")\n")
+    "${smalti_config_deps}include(\"\${CMAKE_CURRENT_LIST_DIR}/smaltiTargets.cmake\")\n")
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/smalti)
   install(FILES LICENSE fonts/OFL.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/smalti)

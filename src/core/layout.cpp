@@ -30,7 +30,10 @@ Size measure_stack(Widget& self, const StackOptions& o, Size available, Axis axi
                    std::max(0.0f, available.height - o.padding.vertical())};
   float main_total = 0, cross_max = 0;
   int count = 0;
-  for (auto& child : self.children()) {
+  // By index, holding the widget rather than a reference into the vector: a measure() that adds
+  // a sibling reallocates it.
+  for (size_t i = 0; i < self.children().size(); ++i) {
+    Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
     const Size s = max_size(child->measure(axis.make(kUnbounded, axis.cross(inner))), child->min_size());
     main_total += axis.main(s);
@@ -51,7 +54,8 @@ void arrange_stack(Widget& self, const StackOptions& o, Rect bounds, Axis axis) 
 
   float used = 0, total_stretch = 0;
   int count = 0;
-  for (auto& child : self.children()) {
+  for (size_t i = 0; i < self.children().size(); ++i) {
+    Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
     used += axis.main(max_size(child->measure(axis.make(kUnbounded, inner_cross)), child->min_size()));
     total_stretch += child->stretch();
@@ -64,7 +68,8 @@ void arrange_stack(Widget& self, const StackOptions& o, Rect bounds, Axis axis) 
     if (o.justify == Align::center) pos += extra * 0.5f;
     else if (o.justify == Align::end) pos += extra;
   }
-  for (auto& child : self.children()) {
+  for (size_t i = 0; i < self.children().size(); ++i) {
+    Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
     const Size s = max_size(child->measure(axis.make(kUnbounded, inner_cross)), child->min_size());
     float main_len = axis.main(s);
@@ -161,7 +166,12 @@ std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float wid
     }
     const float need =
         max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size()).width;
-    if (need <= have || growable == 0) continue;
+    // A span over a column that stretches is left to it: the shared-out width lands there, and
+    // charging the fit columns instead would squeeze the stretch column to nothing.
+    bool stretches = false;
+    for (size_t c = first; c < last; ++c)
+      stretches |= share && options_.columns[c].kind == GridTrack::Kind::stretch;
+    if (stretches || need <= have || growable == 0) continue;
     const float extra = (need - have) / static_cast<float>(growable);
     for (size_t c = first; c < last; ++c) {
       if (content_sized(c)) widths[c] += extra;

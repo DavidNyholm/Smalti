@@ -15,6 +15,12 @@ constexpr int kMaxCompositeDepth = 8;
 // the one below from multiplying a tiny file into billions of shapes.
 constexpr int kMaxOutlineComponents = 256;
 constexpr size_t kMaxOutlinePoints = size_t{1} << 17;
+// Lookup references read from 'kern' features, and pair-adjustment subtables kept, per font. Real
+// fonts use dozens; the limits stop a small file that repeats records and offsets from turning
+// into gigabytes of work.
+constexpr size_t kMaxKerningReferences = 4096;
+constexpr size_t kMaxKerningSubtables = 4096;
+constexpr size_t kOffset16Values = size_t{1} << 16;
 
 // GPOS lookup types and the value-record bits we read.
 constexpr uint16_t kLookupPairAdjustment = 2;
@@ -269,23 +275,38 @@ void Font::read_kerning_lookups() {
     const uint32_t features = gpos + g.u16(6), lookups = gpos + g.u16(8);
     const Bytes feature_list = bytes_.from(features), lookup_list = bytes_.from(lookups);
 
-    std::vector<uint16_t> indices;
+    // Which lookups the 'kern' features use. A feature table that several records share is read
+    // once, and a set of lookups (not a list of references) is all that is kept.
+    const uint16_t lookup_count = lookup_list.u16(0);
+    std::vector<bool> used(lookup_count, false), feature_seen(kOffset16Values, false);
+    size_t references = 0;
     for (uint16_t i = 0; i < feature_list.u16(0); ++i) {
       const size_t rec = 2 + 6 * static_cast<size_t>(i);
       const Bytes tag = feature_list.sub(rec, 4);
       if (tag.u8(0) != 'k' || tag.u8(1) != 'e' || tag.u8(2) != 'r' || tag.u8(3) != 'n') continue;
-      const Bytes feature = feature_list.from(feature_list.u16(rec + 4));
-      for (uint16_t k = 0; k < feature.u16(2); ++k) indices.push_back(feature.u16(4 + 2 * size_t{k}));
+      const uint16_t offset = feature_list.u16(rec + 4);
+      if (feature_seen[offset]) continue;
+      feature_seen[offset] = true;
+      const Bytes feature = feature_list.from(offset);
+      const uint16_t count = feature.u16(2);
+      references += count;
+      if (references > kMaxKerningReferences)
+        throw FontError("font's kerning features are too large");
+      for (uint16_t k = 0; k < count; ++k) {
+        const uint16_t index = feature.u16(4 + 2 * size_t{k});
+        if (index < lookup_count) used[index] = true;
+      }
     }
-    std::sort(indices.begin(), indices.end());
-    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
 
-    for (uint16_t index : indices) {
-      if (index >= lookup_list.u16(0)) continue;
+    size_t subtables = 0;
+    for (uint16_t index = 0; index < lookup_count; ++index) {
+      if (!used[index]) continue;
       const size_t before = pair_subtables_.size();
       const uint32_t lookup = lookups + lookup_list.u16(2 + 2 * size_t{index});
       const Bytes l = bytes_.from(lookup);
       const uint16_t type = l.u16(0);
+      subtables += l.u16(4);
+      if (subtables > kMaxKerningSubtables) throw FontError("font's kerning lookups are too large");
       for (uint16_t s = 0; s < l.u16(4); ++s) {
         uint32_t sub = lookup + l.u16(6 + 2 * size_t{s});
         if (type == kLookupExtension) {
@@ -359,6 +380,8 @@ int Font::kerning(uint16_t left, uint16_t right) const {
   } catch (const FontError&) {
     total = 0;  // damaged kerning data: this pair renders unkerned
   }
+  // Within 16 bits, like the values in the font, so the cached answer is the one returned now.
+  total = std::clamp(total, int{INT16_MIN}, int{INT16_MAX});
   kerning_cache_[key] = static_cast<int16_t>(total);
   return total;
 }

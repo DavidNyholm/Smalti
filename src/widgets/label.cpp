@@ -10,6 +10,7 @@ Label::Label(std::string text, LabelOptions options) : text_(std::move(text)), o
 
 void Label::set_text(std::string text) {
   if (text == text_) return;
+  lines_.clear();  // they view the old text; the relayout requested below cuts new ones
   text_ = std::move(text);
   invalidate_layout();
 }

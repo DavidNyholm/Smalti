@@ -26,6 +26,9 @@ constexpr UINT kWakeMessage = WM_APP + 1;
 // MsgWaitForMultipleObjectsEx takes at most this many handles (one fewer than the usual limit:
 // the message queue counts as one).
 constexpr size_t kMaxWaitHandles = MAXIMUM_WAIT_OBJECTS - 1;
+// Messages handled per turn of the loop before frames get theirs: a stream of posted messages
+// (a long job posting its next piece) must not keep windows from drawing.
+constexpr int kMaxMessagesPerTurn = 64;
 constexpr float kDefaultDpi = 96.0f;
 constexpr UINT_PTR kModalLoopTimer = 1;     // keeps frames coming while a window is dragged
 constexpr double kFallbackRefreshHz = 60.0;
@@ -163,6 +166,7 @@ class Win32Window final : public NativeWindow {
   void release();  // frees whatever exists so far; the destructor, or a failed constructor
   void resize_buffers(int w, int h);
   void make_dib(int w, int h);
+  void drop_buffers();  // after a failed resize: no frame buffer until the next one succeeds
   void run_frame(int64_t now);
 
   Win32Backend& backend_;
@@ -210,6 +214,7 @@ class Win32Backend final : public PlatformBackend {
   // Runs every window's frame that is due; also from inside Windows' own modal loops.
   void run_due_frames();
   void on_wake_message();
+  void run_lost_wake();  // runs posted work whose wake message could not be posted
 
  private:
   void adopt_gpu_if_ready();
@@ -220,6 +225,7 @@ class Win32Backend final : public PlatformBackend {
   // posted work keeps running while they spin.
   HWND wake_window_ = nullptr;
   std::atomic<bool> wake_posted_{false};
+  std::atomic<bool> wake_lost_{false};  // PostMessage failed (a full queue): the loop runs the work
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
@@ -303,11 +309,7 @@ void Win32Window::make_dib(int w, int h) {
   if (!mem_dc_) {
     mem_dc_ = CreateCompatibleDC(nullptr);
     old_bitmap_ = nullptr;
-  }
-  if (dib_) {
-    SelectObject(mem_dc_, old_bitmap_);
-    DeleteObject(dib_);
-    dib_ = nullptr;
+    if (!mem_dc_) throw std::runtime_error("smalti: CreateCompatibleDC failed");
   }
   BITMAPINFO bmi{};
   bmi.bmiHeader.biSize = sizeof bmi.bmiHeader;
@@ -317,8 +319,15 @@ void Win32Window::make_dib(int w, int h) {
   bmi.bmiHeader.biBitCount = 32;
   bmi.bmiHeader.biCompression = BI_RGB;
   void* bits = nullptr;
-  dib_ = CreateDIBSection(mem_dc_, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-  if (!dib_) throw std::runtime_error("smalti: CreateDIBSection failed");
+  // The new bitmap first: if it cannot be made, the old one stays, and so do the pixels the
+  // core is drawing into.
+  HBITMAP fresh = CreateDIBSection(mem_dc_, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (!fresh) throw std::runtime_error("smalti: CreateDIBSection failed");
+  if (dib_) {
+    SelectObject(mem_dc_, old_bitmap_);
+    DeleteObject(dib_);
+  }
+  dib_ = fresh;
   old_bitmap_ = SelectObject(mem_dc_, dib_);
   dib_pixels_ = {static_cast<uint32_t*>(bits), std::max(1, w), std::max(1, h), std::max(1, w)};
 }
@@ -326,9 +335,27 @@ void Win32Window::make_dib(int w, int h) {
 void Win32Window::resize_buffers(int w, int h) {
   width_ = std::max(1, w);
   height_ = std::max(1, h);
-  if (gpu_ && !gpu_->resize(width_, height_)) gpu_.reset();  // device lost: back to the CPU path
-  if (!gpu_) make_dib(width_, height_);
+  try {
+    if (gpu_ && !gpu_->resize(width_, height_)) gpu_.reset();  // device lost: back to the CPU path
+    if (!gpu_) make_dib(width_, height_);
+  } catch (...) {
+    // A buffer may already be gone: the core must learn that it has none, not keep drawing
+    // into freed pixels.
+    drop_buffers();
+    events_.on_resize(width_, height_, scale_);
+    throw;
+  }
   events_.on_resize(width_, height_, scale_);
+}
+
+void Win32Window::drop_buffers() {
+  gpu_.reset();
+  if (dib_) {
+    SelectObject(mem_dc_, old_bitmap_);
+    DeleteObject(dib_);
+    dib_ = nullptr;
+  }
+  dib_pixels_ = {};
 }
 
 void Win32Window::use_gpu(GpuDevice& device) {
@@ -352,8 +379,7 @@ void Win32Window::present(std::span<const RectI> dirty) {
     gpu_ready_ = false;  // this Present spends the permission; the waitable signals the next
     if (gpu_->present(dirty)) return;
     gpu_.reset();  // the device was lost: fall back to GDI and draw everything again
-    make_dib(width_, height_);
-    events_.on_resize(width_, height_, scale_);
+    resize_buffers(width_, height_);
     return;
   }
   HDC dc = GetDC(hwnd_);
@@ -504,7 +530,10 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       KillTimer(hwnd_, kModalLoopTimer);
       return 0;
     case WM_TIMER:
-      if (wp == kModalLoopTimer) backend_.run_due_frames();  // every window, not just this one
+      if (wp == kModalLoopTimer) {
+        backend_.run_lost_wake();
+        backend_.run_due_frames();  // every window, not just this one
+      }
       return 0;
     case WM_CAPTURECHANGED:
       events_.on_capture_lost();  // also after our own release; the core ignores that one
@@ -586,8 +615,16 @@ Win32Backend::~Win32Backend() {
 void Win32Backend::wake() {
   // One message in the queue is enough however many wakes there are; on_wake drains all work.
   if (wake_posted_.exchange(true)) return;
-  if (!PostMessageW(wake_window_, kWakeMessage, 0, 0))
-    wake_posted_ = false;  // a full queue: the next wake retries
+  if (!PostMessageW(wake_window_, kWakeMessage, 0, 0)) {
+    // A full queue. The work must not wait for another post that may never come: the loop
+    // (and the modal-loop timer) checks this flag after the messages it is about to handle.
+    wake_posted_ = false;
+    wake_lost_ = true;
+  }
+}
+
+void Win32Backend::run_lost_wake() {
+  if (wake_lost_.exchange(false)) on_wake_message();
 }
 
 void Win32Backend::on_wake_message() {
@@ -626,6 +663,7 @@ void Win32Backend::adopt_gpu_if_ready() {
 }
 
 void Win32Backend::run_due_frames() {
+  if (error_) return;  // a window's buffers may be gone; run() rethrows the error instead
   const int64_t now = now_ns();
   // By index: closed windows are destroyed only in after_events, so the list cannot shrink
   // during these frames.
@@ -677,11 +715,12 @@ void Win32Backend::run() {
     if (r < WAIT_OBJECT_0 + handles.size() && owners[r - WAIT_OBJECT_0])
       owners[r - WAIT_OBJECT_0]->mark_gpu_ready();
     MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    for (int n = 0; n < kMaxMessagesPerTurn && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++n) {
       if (msg.message == WM_QUIT) quit_ = true;
       TranslateMessage(&msg);
       DispatchMessageW(&msg);
     }
+    run_lost_wake();
     run_due_frames();
     host_.after_events();
   }

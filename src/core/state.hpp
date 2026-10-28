@@ -83,6 +83,7 @@ struct WindowState final : platform::WindowEvents {
 
   // The pipeline, also used by the test driver.
   void draw(int64_t frame_time_ns);
+  void draw_frame(int64_t frame_time_ns);  // draw() without the guards around it
   Widget* hit_test(Point logical) const;
   void set_hovered(Widget* w);
   void move_focus(bool backwards);
@@ -103,8 +104,10 @@ struct WindowState final : platform::WindowEvents {
   bool layout_dirty = true;
   int64_t frame_time = 0;
   int frames_drawn = 0;
+  bool in_draw = false;  // laying out or painting: no frame inside a frame, no widgets added
 
   WidgetId hovered, pressed, focused;
+  MouseButton pressed_button = MouseButton::none;  // the button that started the press
   bool keyboard_mode = false;  // focus rings show only while navigating by keyboard
   bool window_focused = true;
   Point last_mouse{-1, -1};
@@ -156,6 +159,25 @@ struct AppState final : platform::BackendHost {
   std::mutex posted_mutex;
   std::vector<Callback<void()>> posted;
 };
+
+// Counts as an event being dispatched for as long as it lives, so removals requested meanwhile
+// wait even if a hook it calls runs a nested event loop. For public setters that call into
+// widgets (a cancelled press, a lost focus) and may be called outside any event.
+class DispatchScope {
+ public:
+  explicit DispatchScope(AppState& state) : state_(state) { ++state_.dispatch_depth; }
+  ~DispatchScope() { --state_.dispatch_depth; }
+  DispatchScope(const DispatchScope&) = delete;
+  DispatchScope& operator=(const DispatchScope&) = delete;
+
+ private:
+  AppState& state_;
+};
+
+// Visible all the way up: hiding a container hides what is in it.
+bool shown(const Widget& w);
+// Whether input may reach w: shown, and enabled all the way up.
+bool eligible(const Widget& w);
 
 // The core's access to the parts of Widget and Window that are not public API.
 class Tree {

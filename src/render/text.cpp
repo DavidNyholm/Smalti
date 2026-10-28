@@ -1,5 +1,6 @@
 #include "render/text.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 
@@ -8,6 +9,13 @@ namespace smalti::detail {
 namespace {
 
 constexpr char32_t kReplacement = 0xFFFD;
+constexpr char32_t kMaxCodepoint = 0x10FFFF;
+constexpr char32_t kSurrogateFirst = 0xD800, kSurrogateLast = 0xDFFF;
+// The smallest value each sequence length may encode; anything less is an overlong form.
+constexpr char32_t kMinForExtraBytes[] = {0, 0x80, 0x800, 0x10000};
+// No glyph a real font draws at a text size comes near this many pixels; only a hostile font
+// asks for more, and its coverage alone could take gigabytes.
+constexpr double kMaxGlyphPixels = 1024.0 * 1024.0;
 // Glyphs are positioned to a quarter of a pixel horizontally; finer steps are not visible.
 constexpr int kSubpixelSteps = 4;
 // Snapping the x-height may stretch or squash text by at most this much, so unusual sizes are
@@ -24,6 +32,22 @@ float x_height_scale(const Font& font, float size) {
 }
 
 bool is_space(char32_t cp) { return cp == ' ' || cp == '\t'; }
+
+// Whether the outline, placed by t, covers few enough pixels to rasterize: checked before the
+// rasterizer allocates for it.
+bool within_raster_limit(const Path& outline, const Transform& t) {
+  if (outline.points().empty()) return true;
+  double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY;
+  for (const Point p : outline.points()) {
+    const Point d = t.apply(p);
+    x0 = std::min<double>(x0, d.x);
+    y0 = std::min<double>(y0, d.y);
+    x1 = std::max<double>(x1, d.x);
+    y1 = std::max<double>(y1, d.y);
+  }
+  const double area = (x1 - x0 + 1) * (y1 - y0 + 1);
+  return std::isfinite(area) && area <= kMaxGlyphPixels;
+}
 
 }  // namespace
 
@@ -57,6 +81,11 @@ char32_t next_codepoint(std::string_view s, size_t& i) {
     if (i >= s.size() || (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80) return kReplacement;
     cp = cp << 6 | (static_cast<uint8_t>(s[i++]) & 0x3F);
   }
+  // Overlong forms, UTF-16 surrogates and values past the last code point are not characters.
+  if (cp < kMinForExtraBytes[extra] || (cp >= kSurrogateFirst && cp <= kSurrogateLast) ||
+      cp > kMaxCodepoint) {
+    return kReplacement;
+  }
   return cp;
 }
 
@@ -80,7 +109,10 @@ MaskView GlyphCache::get(const Font& font, uint16_t glyph, float size, int quart
   // Font units are y-up; device pixels are y-down with the baseline at y = 0.
   const Transform t{scale, -scale * y_scale, static_cast<float>(quarter) / kSubpixelSteps, 0.0f};
   font.outline(glyph, outline_);
-  const MaskView m = raster_.fill(outline_, t, {-kUnbounded, -kUnbounded, 2 * kUnbounded, 2 * kUnbounded});
+  const MaskView m =
+      within_raster_limit(outline_, t)
+          ? raster_.fill(outline_, t, {-kUnbounded, -kUnbounded, 2 * kUnbounded, 2 * kUnbounded})
+          : MaskView{};  // drawn as nothing, like a damaged glyph
   Entry entry{key, m.x, m.y, m.w, m.h, {}};
   if (!m.empty()) entry.coverage.assign(m.coverage, m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h));
   bytes_ += cost(entry);

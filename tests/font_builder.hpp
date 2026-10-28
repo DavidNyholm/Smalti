@@ -138,15 +138,42 @@ inline Bytes gpos_kern(const std::vector<KernPair>& lookups) {
   return g;
 }
 
+// A GPOS table whose feature list repeats one 'kern' record `records` times, every copy pointing
+// at the same feature table, which lists `lookups` lookup indices. There are no lookups at all:
+// a reader that does not notice the repetition does records * lookups work for nothing.
+inline Bytes gpos_repeated_feature(uint16_t records, uint16_t lookups) {
+  Bytes g;
+  u16(g, 1);
+  u16(g, 0);
+  u16(g, 10);  // script list: present and empty
+  constexpr size_t kFeatureList = 12;
+  const size_t feature_table = 2 + 6 * size_t{records};  // from the feature list
+  const size_t lookup_list = kFeatureList + feature_table + 4 + 2 * size_t{lookups};
+  u16(g, static_cast<uint32_t>(kFeatureList));
+  u16(g, static_cast<uint32_t>(lookup_list));
+  u16(g, 0);
+  u16(g, records);
+  for (uint16_t i = 0; i < records; ++i) {
+    tag(g, "kern");
+    u16(g, static_cast<uint32_t>(feature_table));
+  }
+  u16(g, 0);  // no feature parameters
+  u16(g, lookups);
+  for (uint16_t i = 0; i < lookups; ++i) u16(g, i);
+  u16(g, 0);  // the lookup list: empty
+  return g;
+}
+
 // The tables a font needs around `glyphs` (glyph 0 should be the empty .notdef). `extra` adds or
 // replaces tables, by tag.
-inline Bytes font(const std::vector<Bytes>& glyphs, const std::map<std::string, Bytes>& extra) {
+inline Bytes font(const std::vector<Bytes>& glyphs, const std::map<std::string, Bytes>& extra,
+                  uint16_t units_per_em = 1000) {
   std::map<std::string, Bytes> tables;
   const auto count = static_cast<uint32_t>(glyphs.size());
   Bytes& head = tables["head"];
   head.resize(54, 0);
-  head[18] = 1000 >> 8;  // units per em
-  head[19] = 1000 & 0xFF;
+  head[18] = static_cast<uint8_t>(units_per_em >> 8);
+  head[19] = static_cast<uint8_t>(units_per_em & 0xFF);
   head[51] = 1;  // long loca offsets
   Bytes& maxp = tables["maxp"];
   u32(maxp, 0x00005000);
