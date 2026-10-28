@@ -69,9 +69,16 @@ class Font {
   Bytes table(const char* tag, bool required) const;
   void read_cmap();
   void read_kerning_lookups();
-  void append_outline(Path& path, uint16_t glyph, const Transform& t, int depth) const;
-  void append_simple(Path& path, Bytes glyph, int contours, const Transform& t) const;
-  void append_composite(Path& path, Bytes glyph, const Transform& t, int depth) const;
+  struct OutlineBudget {
+    int components;  // left to visit
+    size_t points;   // left to read
+  };
+  void append_outline(Path& path, uint16_t glyph, const Transform& t, int depth,
+                      OutlineBudget& budget) const;
+  void append_simple(Path& path, Bytes glyph, int contours, const Transform& t,
+                     OutlineBudget& budget) const;
+  void append_composite(Path& path, Bytes glyph, const Transform& t, int depth,
+                        OutlineBudget& budget) const;
   int pair_adjustment(uint32_t subtable, uint16_t left, uint16_t right, bool& applied) const;
 
   std::vector<uint8_t> owned_;
@@ -89,6 +96,7 @@ class Font {
   uint16_t cmap_format_ = 0;
 
   std::vector<uint32_t> pair_subtables_;  // GPOS pair adjustments of the 'kern' feature
+  std::vector<size_t> pair_lookup_ends_;  // where each lookup's subtables end in pair_subtables_
   mutable std::unordered_map<uint32_t, int16_t> kerning_cache_;
 };
 

@@ -186,6 +186,7 @@ class Slider : public Widget {
   void on_hover_changed(bool hovered) override;
   bool focusable() const override { return enabled(); }
   Cursor cursor() const override { return Cursor::hand; }
+  float overflow() const override;  // the knob's shadow
 
  private:
   void set_from_pointer(float x);

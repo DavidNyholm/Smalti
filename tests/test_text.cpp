@@ -20,6 +20,14 @@ TEST(text_utf8_decoding_and_invalid_bytes) {
   CHECK_EQ(static_cast<uint32_t>(next_codepoint(bad, i)), 0xFFFDu);
   CHECK_EQ(static_cast<uint32_t>(next_codepoint(bad, i)), 0xFFFDu);
   CHECK_EQ(i, bad.size());
+  const std::string interrupted =
+      "\xC3"
+      "A";  // a lead byte, then a plain letter instead of its continuation
+  i = 0;
+  CHECK_EQ(static_cast<uint32_t>(next_codepoint(interrupted, i)), 0xFFFDu);
+  CHECK_EQ(i, size_t{1});  // only the lead byte is used up, so the letter survives
+  if (i < interrupted.size())
+    CHECK_EQ(static_cast<uint32_t>(next_codepoint(interrupted, i)), 0x41u);
 }
 
 TEST(text_width_grows_and_kerning_tightens) {

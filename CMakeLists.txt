@@ -69,7 +69,7 @@ function(smalti_strict target)
   else()
     target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     if(SMALTI_SANITIZE)
-      target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
       target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endif()
   endif()
@@ -102,6 +102,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_layout.cpp
     tests/test_memory.cpp
     tests/test_raster.cpp
+    tests/test_review.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_widgets.cpp)

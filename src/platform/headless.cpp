@@ -7,8 +7,8 @@ namespace smalti::platform {
 
 HeadlessWindow::HeadlessWindow(HeadlessBackend& backend, const WindowOptions& options, WindowEvents& events)
     : backend_(backend), events_(events) {
-  backend_.windows_.push_back(this);
   resize(options.size, 1.0f);
+  backend_.windows_.push_back(this);  // last: if anything above throws, the backend never saw us
 }
 
 HeadlessWindow::~HeadlessWindow() { backend_.forget(this); }

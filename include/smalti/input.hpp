@@ -15,7 +15,9 @@ struct Modifiers {
 };
 
 struct MouseEvent {
-  enum class Kind : uint8_t { move, press, release, wheel, enter, leave };
+  // cancel: the press ended without a release, because the widget was hidden, disabled or
+  // removed, or the system took the mouse away. Undo whatever the press started.
+  enum class Kind : uint8_t { move, press, release, wheel, enter, leave, cancel };
   Kind kind = Kind::move;
   Point position;  // window coordinates
   MouseButton button = MouseButton::none;

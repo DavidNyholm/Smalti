@@ -93,6 +93,10 @@ bool Button::on_mouse(const MouseEvent& e) {
     press_visual(true);
     return true;
   }
+  if (e.kind == MouseEvent::Kind::cancel) {
+    press_visual(false);
+    return true;
+  }
   if (primary_release(e)) {
     press_visual(false);
     if (bounds().contains(e.position)) click();
@@ -277,11 +281,14 @@ void RadioButton::set_selected(bool selected, bool notify) {
   if (notify && on_select_) on_select_();
 }
 
+// Only a selection the keyboard can reach counts: with the selected radio hidden or disabled,
+// every other radio in the group is a tab stop again.
 bool RadioButton::group_has_selection() const {
   const Widget* parent = this->parent().try_get();
   if (!parent) return selected_;
   for (const auto& sibling : parent->children()) {
-    if (const auto* radio = dynamic_cast<const RadioButton*>(sibling.get()); radio && radio->selected_) return true;
+    const auto* radio = dynamic_cast<const RadioButton*>(sibling.get());
+    if (radio && radio->selected_ && radio->visible() && radio->enabled()) return true;
   }
   return false;
 }

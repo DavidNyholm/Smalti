@@ -10,6 +10,9 @@ namespace smalti {
 namespace {
 
 constexpr float kSliderHeight = 20, kTrackThickness = 4, kSliderKnob = 8;
+constexpr float kKnobHoverGrowth = 1;  // the knob grows a little under the pointer
+constexpr float kKnobShadowBlur = 2, kKnobShadowOffset = 1;
+constexpr float kShadowReachBlurs = 3;  // a shadow fades out within 3 blurs (render/canvas.cpp)
 constexpr float kSliderMinWidth = 120;
 constexpr float kKeyStepFraction = 0.01f;   // arrow keys move 1% of the range without a step
 constexpr float kPageStepFraction = 0.1f;   // Page Up and Page Down move 10%
@@ -22,9 +25,18 @@ constexpr int64_t kSweepPeriodNs = 1'400'000'000;
 
 // --- Slider -------------------------------------------------------------------------------
 
-Slider::Slider(SliderOptions options) : options_(options), value_(std::clamp(options.value, options.min, options.max)) {
-  if (options_.max < options_.min) std::swap(options_.min, options_.max);
+namespace {
+
+SliderOptions normalized(SliderOptions o) {
+  if (o.max < o.min) std::swap(o.min, o.max);
+  return o;
 }
+
+}  // namespace
+
+Slider::Slider(SliderOptions options)
+    : options_(normalized(options)),
+      value_(std::clamp(options_.value, options_.min, options_.max)) {}
 
 Slider& Slider::on_change(Callback<void(float)> fn) {
   on_change_ = std::move(fn);
@@ -71,10 +83,11 @@ void Slider::paint(Painter& p) {
   const Rect track{r.x + kSliderKnob, cy - kTrackThickness * 0.5f, usable, kTrackThickness};
   p.fill_rounded_rect(track, kTrackThickness * 0.5f, th.selected);
   p.fill_rounded_rect({track.x, track.y, kx - track.x, track.height}, kTrackThickness * 0.5f, detail::dim_if(off, th.accent));
-  const float radius = kSliderKnob + hover;  // the knob grows a little under the pointer
+  const float radius = kSliderKnob + kKnobHoverGrowth * hover;
   if (th.shadows) {
     const Rect knob_box{kx - radius, cy - radius, 2 * radius, 2 * radius};
-    p.shadow({knob_box.x, knob_box.y + 1, knob_box.width, knob_box.height}, radius, 2, th.shadow, knob_box);
+    p.shadow({knob_box.x, knob_box.y + kKnobShadowOffset, knob_box.width, knob_box.height}, radius,
+             kKnobShadowBlur, th.shadow, knob_box);
   }
   p.fill_circle({kx, cy}, radius, detail::dim_if(off, Color::hex(0xFFFFFF)));
   p.stroke_circle({kx, cy}, radius, 1, th.border);
@@ -111,6 +124,14 @@ bool Slider::on_key(const KeyEvent& e) {
 }
 
 void Slider::on_hover_changed(bool hovered) { animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast); }
+
+// At either end of the track the knob reaches past the bounds; its shadow and focus ring reach
+// further. One more pixel covers anti-aliasing.
+float Slider::overflow() const {
+  const float shadow = kKnobShadowOffset + kShadowReachBlurs * kKnobShadowBlur;
+  const float ring = detail::kFocusRingGap + detail::kFocusRingWidth;
+  return kKnobHoverGrowth + std::max(shadow, ring) + 1;
+}
 
 // --- ProgressBar --------------------------------------------------------------------------
 

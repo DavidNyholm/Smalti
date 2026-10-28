@@ -27,6 +27,8 @@ class WindowEvents {
   virtual void on_mouse_leave() = 0;
   virtual void on_key(const KeyEvent& e) = 0;
   virtual void on_focus(bool gained) = 0;
+  // The system took the mouse capture away (another window grabbed it): the press is over.
+  virtual void on_capture_lost() = 0;
   // The client area changed size or scale, or the frame buffer was replaced: draw everything.
   virtual void on_resize(int width_px, int height_px, float scale) = 0;
   // Draw now. Called once per request_frame(), paced to the display.

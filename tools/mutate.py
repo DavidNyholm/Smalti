@@ -5,6 +5,10 @@ whether the suite caught the bug. Every file is restored afterwards, whatever ha
 
     python tools/mutate.py                   # the "windows" preset on Windows, "headless" elsewhere
     python tools/mutate.py --preset linux
+    python tools/mutate.py --only kerning    # just the bugs whose description contains "kerning"
+
+A suite that no longer finishes (TIMED OUT) counts as having caught the bug: anyone running it
+sees the failure. It is reported separately all the same.
 
 Needs the configure step to have been run for that preset (cmake --preset <name>).
 """
@@ -60,12 +64,47 @@ MUTATIONS = [
     (
         "core/app.cpp",
         "an exception from a callback is swallowed",
-        [("      if (!pending_exception) pending_exception = std::current_exception();", "      (void)0;")],
+        [("  if (!pending_exception) pending_exception = e;", "  (void)e;")],
     ),
     (
         "core/app.cpp",
         "work posted from another thread never runs",
-        [("  for (auto& fn : work) guarded([&] { fn(); });", "  (void)work;")],
+        [("    for (auto& fn : work) guarded([&] { fn(); });", "    (void)work;")],
+    ),
+    (
+        "core/app.cpp",
+        "a nested event loop destroys widgets whose handlers are still running",
+        [("  if (dispatch_depth > 0) return;  // an outer event", "  // an outer event")],
+    ),
+    (
+        "core/widget.cpp",
+        "children built before their parent was added never learn their window",
+        [("  attach(*child, window_);", "  detail::Tree::set_window(*child, window_);")],
+    ),
+    (
+        "core/window.cpp",
+        "damage requested while painting is dropped",
+        [
+            (
+                "  native->present(drawing);\n  drawing.clear();",
+                "  native->present(drawing);\n  drawing.clear();\n  dirty.clear();",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "a window with no widgets never draws its first frame",
+        [("  invalidate_layout();  // the first frame", "  // the first frame")],
+    ),
+    (
+        "core/window.cpp",
+        "the default minimum size overrides a smaller requested size",
+        [
+            (
+                "  n.min_size = {std::min(o.min_size.width, o.size.width), std::min(o.min_size.height, o.size.height)};",
+                "  n.min_size = o.min_size;",
+            )
+        ],
     ),
     # Layout
     (
@@ -108,10 +147,15 @@ MUTATIONS = [
         "grid fit columns ignore their cells",
         [
             (
-                "      widths[static_cast<size_t>(cell.column)] = std::max(widths[static_cast<size_t>(cell.column)], s.width);",
+                "      widths[c] = std::max(widths[c], s.width);",
                 "      (void)s;",
             )
         ],
+    ),
+    (
+        "core/layout.cpp",
+        "a spanning grid child does not widen its columns",
+        [("      if (content_sized(c)) widths[c] += extra;", "      (void)extra;")],
     ),
     (
         "core/layout.cpp",
@@ -148,6 +192,21 @@ MUTATIONS = [
                 "radio && radio != this) (void)radio;",
             )
         ],
+    ),
+    (
+        "widgets/controls.cpp",
+        "a hidden selected radio still takes the group's tab stop",
+        [
+            (
+                "if (radio && radio->selected_ && radio->visible() && radio->enabled()) return true;",
+                "if (radio && radio->selected_) return true;",
+            )
+        ],
+    ),
+    (
+        "widgets/range.cpp",
+        "reversed slider bounds are put right only after the value is clamped",
+        [("    : options_(normalized(options)), value_(", "    : options_(options), value_(")],
     ),
     (
         "widgets/range.cpp",
@@ -213,8 +272,8 @@ MUTATIONS = [
     # Rendering
     (
         "render/raster.cpp",
-        "edges left of the clip are not moved onto it",
-        [("    p0.x = std::clamp(p0.x, 0.0f, w);\n", "")],
+        "edges are not split where they cross the clip's left border",
+        [("  for (float edge : {0.0f, w}) {", "  for (float edge : {w}) {")],
     ),
     (
         "render/raster.cpp",
@@ -247,7 +306,7 @@ MUTATIONS = [
         [
             (
                 "void Path::clear() {\n  verbs_.clear();\n  points_.clear();",
-                "void Path::clear() {\n  verbs_ = {};\n  points_ = {};",
+                "void Path::clear() {\n  verbs_ = std::vector<Verb>();\n  points_ = std::vector<Point>();",
             )
         ],
     ),
@@ -256,6 +315,21 @@ MUTATIONS = [
         "render/font.cpp",
         "GPOS kerning is never read",
         [("        pair_subtables_.push_back(sub);", "        (void)sub;")],
+    ),
+    (
+        "render/font.cpp",
+        "kerning stops after the first lookup",
+        [("      begin = end;\n    }", "      begin = end;\n      break;\n    }")],
+    ),
+    (
+        "render/text.hpp",
+        "glyph cache entries with no pixels cost nothing",
+        [
+            (
+                "  static size_t cost(const Entry& e) { return e.coverage.size() + kEntryOverhead; }",
+                "  static size_t cost(const Entry& e) { return e.coverage.size(); }",
+            )
+        ],
     ),
     (
         "render/text.cpp",
@@ -312,6 +386,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     default_preset = "windows" if platform.system() == "Windows" else "headless"
     parser.add_argument("--preset", default=default_preset)
+    parser.add_argument("--only", default="", help="run only the bugs whose description contains this")
     opts = parser.parse_args()
     build_dir = ROOT / "build" / opts.preset
     windows = opts.preset.startswith("windows")
@@ -329,6 +404,8 @@ def main() -> int:
 
     results = []
     for file_name, description, edits in MUTATIONS:
+        if opts.only not in description:
+            continue
         path = ROOT / "src" / file_name
         original = path.read_text(encoding="utf-8")
         mutated = original
@@ -363,8 +440,10 @@ def main() -> int:
     if restored.returncode != 0:
         print("WARNING: rebuilding the restored sources failed; run the build by hand")
         return 2
-    caught = sum(1 for r in results if r[0] == "caught")
-    print(f"\n{caught} of {len(results)} injected bugs caught")
+    caught = sum(1 for r in results if r[0] in ("caught", "TIMED OUT"))
+    timed_out = sum(1 for r in results if r[0] == "TIMED OUT")
+    note = f" ({timed_out} by the suite no longer finishing)" if timed_out else ""
+    print(f"\n{caught} of {len(results)} injected bugs caught{note}")
     return 0 if caught == len(results) else 1
 
 

@@ -18,6 +18,9 @@ constexpr float kShadowReach = 3.0f;
 // corner tiles take this path, and they are cached, so 8 is cheap and keeps them seamless
 // with the exact closed-form edges next to them.
 constexpr int kShadowSamples = 8;
+// Shadow blur and corner radius are snapped to this many steps per pixel: finer than can be
+// seen, and the corner-tile cache key.
+constexpr float kShadowKeySteps = 64;
 
 float srgb_to_linear(float v) { return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); }
 float linear_to_srgb(float v) { return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1.0f / 2.4f) - 0.055f; }
@@ -205,6 +208,9 @@ void Canvas::blend_mask(MaskView m, Color c) {
 }
 
 void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, RectF occluder) {
+  // Blur and corner are snapped to 1/64 px before anything uses them, so the cached corner tile
+  // for a key was made from exactly the values that look it up (and is the same size).
+  sigma = std::round(sigma * kShadowKeySteps) / kShadowKeySteps;
   if (sigma <= 0 || c.a <= 0) return;
   const float reach = kShadowReach * sigma;
   const RectI area = RectI{static_cast<int>(std::floor(box.x - reach)), static_cast<int>(std::floor(box.y - reach)),
@@ -214,7 +220,8 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
   if (area.empty()) return;
   const float cx = box.x + box.w * 0.5f, cy = box.y + box.h * 0.5f;
   const float half_w = box.w * 0.5f, half_h = box.h * 0.5f;
-  const float corner = std::min(radius, std::min(half_w, half_h));
+  const float corner =
+      std::round(std::min(radius, std::min(half_w, half_h)) * kShadowKeySteps) / kShadowKeySteps;
   const float k = std::sqrt(0.5f) / sigma;
   // Away from the corners the shadow is separable: deep inside vertically it varies only with
   // x, deep inside horizontally only with y. Those profiles are computed once per column and
@@ -270,13 +277,18 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
 }
 
 const std::vector<float>& Canvas::shadow_corner(float sigma, float corner, int size) {
-  const uint64_t key = static_cast<uint64_t>(std::lround(sigma * 64)) << 32 | static_cast<uint64_t>(std::lround(corner * 64));
-  if (const auto it = shadow_corners_.find(key); it != shadow_corners_.end()) return it->second;
+  const uint64_t key = static_cast<uint64_t>(std::lround(sigma * kShadowKeySteps)) << 32 |
+                       static_cast<uint64_t>(std::lround(corner * kShadowKeySteps));
+  const size_t cells = static_cast<size_t>(size) * static_cast<size_t>(size);
+  if (const auto it = shadow_corners_.find(key); it != shadow_corners_.end()) {
+    if (it->second.size() == cells) return it->second;
+    shadow_corners_.erase(it);  // cannot happen with snapped inputs; never read past a tile
+  }
   // The top-left corner of a box big enough that nothing else reaches it. Index (u, v) is the
   // pixel whose centre lies u + 0.5 - origin inside the left edge and v + 0.5 - origin inside
   // the top edge, matching the lookup in shadow().
   const float origin = std::ceil(kShadowReach * sigma), half = 2.0f * static_cast<float>(size);
-  std::vector<float> tile(static_cast<size_t>(size) * static_cast<size_t>(size));
+  std::vector<float> tile(cells);
   for (int v = 0; v < size; ++v) {
     for (int u = 0; u < size; ++u) {
       const float px = static_cast<float>(u) + 0.5f - origin - half, py = static_cast<float>(v) + 0.5f - origin - half;

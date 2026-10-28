@@ -29,6 +29,14 @@ bool overlaps(const RectI& a, const RectI& b) {
 
 Widget* find(WidgetId id) { return Registry::instance().find(id); }
 
+// The default minimum must not override a smaller size asked for explicitly.
+WindowOptions normalized(const WindowOptions& o) {
+  WindowOptions n = o;
+  n.min_size = {std::min(o.min_size.width, o.size.width),
+                std::min(o.min_size.height, o.size.height)};
+  return n;
+}
+
 void paint_tree(Widget& w, Painter& p, const RectI& clip, float scale) {
   if (!w.visible()) return;
   const float o = w.overflow();
@@ -45,6 +53,24 @@ Widget* hit(Widget& w, Point p) {
     if (Widget* h = hit(**it, p)) return h;
   }
   return &w;
+}
+
+// Visible all the way up: hiding a container hides what is in it.
+bool shown(const Widget& w) {
+  for (const Widget* x = &w; x; x = Tree::parent_of(*x)) {
+    if (!x->visible()) return false;
+  }
+  return true;
+}
+
+// Whether input may still reach w.
+bool eligible(const Widget& w) { return w.enabled() && shown(w); }
+
+bool within(const Widget& root, const Widget* w) {
+  for (; w; w = Tree::parent_of(*w)) {
+    if (w == &root) return true;
+  }
+  return false;
 }
 
 void collect_focusable(Widget& w, std::vector<Widget*>& out) {
@@ -73,8 +99,12 @@ WindowState* window_state_of(const Widget& w) {
   return win ? Tree::state_of(*win) : nullptr;
 }
 
-WindowState::WindowState(App& app_ref, Window& window_ref, const WindowOptions& options)
-    : app(app_ref), window(window_ref), title(options.title), min_size(options.min_size) {
+WindowState::WindowState(App& app_ref, Window& window_ref, const WindowOptions& requested)
+    : app(app_ref),
+      window(window_ref),
+      title(requested.title),
+      min_size(normalized(requested).min_size) {
+  const WindowOptions options = normalized(requested);
   AppState& as = app.state();
   paint.canvas = &canvas;
   paint.glyphs = &as.glyphs;
@@ -86,6 +116,7 @@ WindowState::WindowState(App& app_ref, Window& window_ref, const WindowOptions& 
   frame = native->frame_buffer();
   canvas.set_target(frame);
   native->set_dark_frame(as.theme.dark);
+  invalidate_layout();  // the first frame: on_resize's request came before there was a `native`
 }
 
 WindowState::~WindowState() = default;
@@ -158,15 +189,19 @@ void WindowState::draw(int64_t frame_time_ns) {
     dirty.assign(1, RectI{0, 0, width_px, height_px});
   }
   if (dirty.empty() || frame.empty()) return;
+  // Paint from a batch of its own: a widget that invalidates while painting adds to `dirty` for
+  // the next frame instead of changing the list being drawn.
+  drawing.swap(dirty);
+  dirty.clear();
   paint.scale = scale;
   Painter painter(paint);
-  for (const RectI& r : dirty) {
+  for (const RectI& r : drawing) {
     canvas.set_clip(r);
     paint.clips.assign(1, canvas.clip());
     paint_tree(window, painter, r, scale);
   }
-  native->present(dirty);
-  dirty.clear();
+  native->present(drawing);
+  drawing.clear();
   ++frames_drawn;
   if (!animating.empty()) request_frame();
 }
@@ -192,6 +227,26 @@ void WindowState::focus(Widget* w) {
   if (w) w->on_focus_changed(true);
 }
 
+void WindowState::cancel_press() {
+  if (pressed == WidgetId{}) return;
+  Widget* w = find(pressed);
+  pressed = {};  // first: releasing the capture can report the loss straight back
+  if (native) native->capture_mouse(false);
+  if (w) {
+    w->on_mouse({MouseEvent::Kind::cancel, last_mouse, MouseButton::none, {}, {}, 1});
+    w->invalidate();
+  }
+}
+
+void WindowState::release_subtree(const Widget& root) {
+  if (within(root, find(pressed))) cancel_press();
+  if (within(root, find(focused))) {
+    if (Widget* f = find(focused)) f->invalidate();
+    focus(nullptr);
+  }
+  if (within(root, find(hovered))) set_hovered(nullptr);
+}
+
 void WindowState::move_focus(bool backwards) {
   std::vector<Widget*> order;
   collect_focusable(window, order);
@@ -213,7 +268,10 @@ void WindowState::on_mouse_move(Point device, Modifiers mods) {
     last_mouse = p;
     MouseEvent e{MouseEvent::Kind::move, p, MouseButton::none, mods, {}, 1};
     if (Widget* captured = find(pressed)) {
-      captured->on_mouse(e);
+      if (eligible(*captured))
+        captured->on_mouse(e);
+      else
+        cancel_press();
     } else if (Widget* h = hit_test(p)) {
       if (h->enabled()) h->on_mouse(e);
     }
@@ -228,6 +286,10 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
     MouseEvent e{down ? MouseEvent::Kind::press : MouseEvent::Kind::release, p, button, mods, {}, clicks};
     if (!down) {
       Widget* captured = find(pressed);
+      if (captured && !eligible(*captured)) {
+        cancel_press();
+        captured = nullptr;
+      }
       pressed = {};
       native->capture_mouse(false);
       if (captured) {
@@ -287,7 +349,12 @@ void WindowState::on_key(const KeyEvent& e) {
       keyboard_mode = true;
       if (Widget* f = find(focused)) f->invalidate();
     }
-    for (Widget* w = find(focused); w; w = Tree::parent_of(*w)) {
+    Widget* f = find(focused);
+    if (f && !eligible(*f)) {
+      focus(nullptr);  // hidden or disabled since it took focus: keys must not reach it
+      f = nullptr;
+    }
+    for (Widget* w = f; w; w = Tree::parent_of(*w)) {
       if (w->enabled() && w->on_key(e)) break;
     }
   });
@@ -296,6 +363,10 @@ void WindowState::on_key(const KeyEvent& e) {
 void WindowState::on_focus(bool gained) {
   window_focused = gained;
   if (Widget* f = find(focused)) f->invalidate();
+}
+
+void WindowState::on_capture_lost() {
+  app.state().guarded([&] { cancel_press(); });
 }
 
 void WindowState::on_resize(int w, int h, float new_scale) {

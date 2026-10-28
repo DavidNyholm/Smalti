@@ -19,7 +19,7 @@ class Tree;
 struct WindowOptions {
   std::string title = "smalti";
   Size size{960, 640};  // client area, logical pixels
-  Size min_size{320, 240};
+  Size min_size{320, 240};  // never more than `size`: a smaller window asked for wins
 };
 
 class Window final : public Widget {

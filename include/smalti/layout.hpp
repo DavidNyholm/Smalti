@@ -70,7 +70,7 @@ struct GridOptions {
 // Children fill the cells left to right, then down; set_column_span() widens one.
 class Grid : public Widget {
  public:
-  explicit Grid(GridOptions options = {}) : options_(std::move(options)) {}
+  explicit Grid(GridOptions options = {});
   Size measure(Size available) override;
   void arrange(Rect bounds) override;
   bool accepts_children() const override { return true; }

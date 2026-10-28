@@ -10,6 +10,11 @@ namespace {
 // A composite glyph may refer to composites; real fonts nest two or three deep. The limit
 // stops a damaged font that refers to itself.
 constexpr int kMaxCompositeDepth = 8;
+// Components visited and points read for one outline, all levels together. Real composites
+// (accented letters, ligatures) use a handful; the limits stop a font whose levels each repeat
+// the one below from multiplying a tiny file into billions of shapes.
+constexpr int kMaxOutlineComponents = 256;
+constexpr size_t kMaxOutlinePoints = size_t{1} << 17;
 
 // GPOS lookup types and the value-record bits we read.
 constexpr uint16_t kLookupPairAdjustment = 2;
@@ -212,11 +217,13 @@ uint16_t Font::glyph_index(char32_t cp) const {
   try {
     const Bytes sub = bytes_.from(cmap_offset_);
     if (cmap_format_ == 12) {
-      int lo = 0, hi = static_cast<int>(sub.u32(12)) - 1;
-      while (lo <= hi) {
-        const int mid = lo + (hi - lo) / 2;
-        const size_t group = 16 + 12 * static_cast<size_t>(mid);
-        if (cp < sub.u32(group)) hi = mid - 1;
+      // The count is the font's claim: searched unsigned, and every group read is checked.
+      uint32_t lo = 0, hi = sub.u32(12);  // [lo, hi)
+      while (lo < hi) {
+        const uint32_t mid = lo + (hi - lo) / 2;
+        const size_t group = 16 + 12 * size_t{mid};
+        if (cp < sub.u32(group))
+          hi = mid;
         else if (cp > sub.u32(group + 4)) lo = mid + 1;
         else return static_cast<uint16_t>(sub.u32(group + 8) + (cp - sub.u32(group)));
       }
@@ -275,6 +282,7 @@ void Font::read_kerning_lookups() {
 
     for (uint16_t index : indices) {
       if (index >= lookup_list.u16(0)) continue;
+      const size_t before = pair_subtables_.size();
       const uint32_t lookup = lookups + lookup_list.u16(2 + 2 * size_t{index});
       const Bytes l = bytes_.from(lookup);
       const uint16_t type = l.u16(0);
@@ -289,9 +297,11 @@ void Font::read_kerning_lookups() {
         }
         pair_subtables_.push_back(sub);
       }
+      if (pair_subtables_.size() > before) pair_lookup_ends_.push_back(pair_subtables_.size());
     }
   } catch (const FontError&) {
     pair_subtables_.clear();  // damaged kerning data: text still renders, unkerned
+    pair_lookup_ends_.clear();
   }
 }
 
@@ -338,10 +348,13 @@ int Font::kerning(uint16_t left, uint16_t right) const {
   if (const auto it = kerning_cache_.find(key); it != kerning_cache_.end()) return it->second;
   int total = 0;
   try {
-    bool applied = false;
-    for (uint32_t sub : pair_subtables_) {
-      total += pair_adjustment(sub, left, right, applied);
-      if (applied) break;  // the first subtable that applies ends the lookup
+    // Each lookup contributes; within one, the first subtable that applies ends it.
+    size_t begin = 0;
+    for (size_t end : pair_lookup_ends_) {
+      bool applied = false;
+      for (size_t i = begin; i < end && !applied; ++i)
+        total += pair_adjustment(pair_subtables_[i], left, right, applied);
+      begin = end;
     }
   } catch (const FontError&) {
     total = 0;  // damaged kerning data: this pair renders unkerned
@@ -353,26 +366,32 @@ int Font::kerning(uint16_t left, uint16_t right) const {
 void Font::outline(uint16_t glyph, Path& out) const {
   out.clear();
   try {
-    append_outline(out, glyph, Transform{}, 0);
+    OutlineBudget budget{kMaxOutlineComponents, kMaxOutlinePoints};
+    append_outline(out, glyph, Transform{}, 0, budget);
   } catch (const FontError&) {
     out.clear();  // a damaged glyph draws as nothing rather than as garbage
   }
 }
 
-void Font::append_outline(Path& path, uint16_t glyph, const Transform& t, int depth) const {
+void Font::append_outline(Path& path, uint16_t glyph, const Transform& t, int depth,
+                          OutlineBudget& budget) const {
   if (glyph >= glyph_count_) return;
   if (depth > kMaxCompositeDepth) throw FontError("composite glyphs nest too deep");
+  if (--budget.components < 0) throw FontError("glyph has too many components");
   const Bytes loca = bytes_.from(loca_offset_);
   const uint32_t start = long_loca_ ? loca.u32(4 * size_t{glyph}) : 2u * loca.u16(2 * size_t{glyph});
   const uint32_t end = long_loca_ ? loca.u32(4 * size_t{glyph} + 4) : 2u * loca.u16(2 * size_t{glyph} + 2);
   if (end <= start) return;  // an empty glyph, such as a space
   const Bytes g = bytes_.from(glyf_offset_).sub(start, end - start);
   const int16_t contours = g.i16(0);
-  if (contours >= 0) append_simple(path, g, contours, t);
-  else append_composite(path, g, t, depth);
+  if (contours >= 0)
+    append_simple(path, g, contours, t, budget);
+  else
+    append_composite(path, g, t, depth, budget);
 }
 
-void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t) const {
+void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t,
+                         OutlineBudget& budget) const {
   if (contours == 0) return;
   // Reused per thread: outlines are read when a glyph first enters the cache, and the cache
   // then serves it, so this does not allocate once glyphs are warm.
@@ -382,6 +401,8 @@ void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t) 
   ends.resize(static_cast<size_t>(contours));
   for (size_t i = 0; i < ends.size(); ++i) ends[i] = g.u16(10 + 2 * i);
   const size_t point_count = size_t{ends.back()} + 1;
+  if (point_count > budget.points) throw FontError("glyph has too many points");
+  budget.points -= point_count;
   size_t pos = 10 + 2 * static_cast<size_t>(contours);
   pos += 2 + g.u16(pos);  // skip the hinting instructions
 
@@ -453,7 +474,8 @@ void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t) 
   }
 }
 
-void Font::append_composite(Path& path, Bytes g, const Transform& t, int depth) const {
+void Font::append_composite(Path& path, Bytes g, const Transform& t, int depth,
+                            OutlineBudget& budget) const {
   size_t pos = 10;
   uint16_t flags = 0;
   do {
@@ -487,7 +509,7 @@ void Font::append_composite(Path& path, Bytes g, const Transform& t, int depth) 
     // UI fonts offset and scale components; a skewed component (the off-diagonal terms of
     // the two-by-two) is drawn without its skew.
     const Transform local{t.sx * sx, t.sy * sy, t.sx * dx + t.tx, t.sy * dy + t.ty};
-    append_outline(path, component, local, depth + 1);
+    append_outline(path, component, local, depth + 1, budget);
   } while (flags & kMoreComponents);
 }
 

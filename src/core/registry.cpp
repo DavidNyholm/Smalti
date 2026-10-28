@@ -1,4 +1,5 @@
 // The widget registry behind Ref, and the contract handler.
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -61,8 +62,7 @@ WidgetId Registry::allocate(Widget* widget) {
   }
   Slot& s = slots_[slot];
   s.widget = widget;
-  ++s.generation;
-  if (s.generation == 0) s.generation = 1;  // 0 means "no widget"; skip it on wrap-around
+  ++s.generation;  // never wraps: release() retires a slot before it could
   ++live_;
   return {slot, s.generation};
 }
@@ -73,7 +73,9 @@ void Registry::release(WidgetId id) {
   if (s.generation != id.generation || s.widget == nullptr) return;
   s.widget = nullptr;
   ++s.generation;  // every outstanding Ref to this slot is now stale
-  free_.push_back(id.slot);
+  // A slot whose generation would wrap is never reused: a Ref from four billion widgets ago
+  // must not come back to life. Retiring one costs its 16 bytes.
+  if (s.generation < UINT32_MAX - 1) free_.push_back(id.slot);
   --live_;
 }
 

@@ -63,6 +63,11 @@ struct WindowState final : platform::WindowEvents {
   int64_t now() const;
   void focus(Widget* w);
   void request_frame();
+  // Ends the mouse press without a release: the pressed widget gets MouseEvent::Kind::cancel.
+  void cancel_press();
+  // Drops focus, the press and the hover from `root` and its descendants, as they are being
+  // hidden, disabled or removed.
+  void release_subtree(const Widget& root);
 
   // platform::WindowEvents
   void on_mouse_move(Point device, Modifiers mods) override;
@@ -71,6 +76,7 @@ struct WindowState final : platform::WindowEvents {
   void on_mouse_leave() override;
   void on_key(const KeyEvent& e) override;
   void on_focus(bool gained) override;
+  void on_capture_lost() override;
   void on_resize(int width_px, int height_px, float scale) override;
   void on_frame(int64_t frame_time_ns) override;
   void on_close_request() override;
@@ -93,6 +99,7 @@ struct WindowState final : platform::WindowEvents {
   PaintState paint;
 
   std::vector<RectI> dirty;
+  std::vector<RectI> drawing;  // the damage of the frame being painted; `dirty` collects the next
   bool layout_dirty = true;
   int64_t frame_time = 0;
   int frames_drawn = 0;
@@ -111,21 +118,25 @@ struct AppState final : platform::BackendHost {
   void on_wake() override;
   void after_events() override;
   // Runs fn, catching anything it throws: the first exception stops the loop and is rethrown
-  // from run(). Pending removals are processed afterwards.
+  // from run(). Pending removals are processed once the outermost guarded call returns: a
+  // callback that opens a nested event loop (a native message box) must not find its own
+  // widget destroyed by an event dispatched inside that loop.
   template <class F>
   void guarded(F&& fn) {
+    ++dispatch_depth;
     try {
       fn();
     } catch (...) {
-      if (!pending_exception) pending_exception = std::current_exception();
-      if (backend) backend->quit();
+      stop_with(std::current_exception());
     }
+    --dispatch_depth;
     flush_removals();
   }
+  void stop_with(std::exception_ptr e);  // keeps the first exception and ends the loop
   void schedule_removal(WidgetId id);
-  void flush_removals();
+  void flush_removals();  // does nothing while an event is being dispatched
   void window_closed(Window* w);
-  void reap_closed();  // destroys windows closed since the last call
+  void reap_closed();  // destroys windows closed since the last call; not during dispatch
 
   App& app;
   std::unique_ptr<platform::PlatformBackend> backend;
@@ -138,7 +149,9 @@ struct AppState final : platform::BackendHost {
   std::vector<WidgetId> removals;
   std::exception_ptr pending_exception;
   int exit_code = 0;
+  int dispatch_depth = 0;  // guarded() calls on the stack
   bool running = false;
+  bool draining_posted = false;
 
   std::mutex posted_mutex;
   std::vector<Callback<void()>> posted;

@@ -27,17 +27,32 @@ AppState::AppState(App& app_ref, const AppOptions& options)
 AppState::~AppState() = default;
 
 void AppState::on_wake() {
-  std::vector<Callback<void()>> work;
-  {
-    const std::lock_guard lock(posted_mutex);
-    work.swap(posted);
+  // A posted function that runs a nested event loop (a native message box) can be woken into
+  // again; the drain further up the stack picks up the new work afterwards, so posted work
+  // always runs in the order it was posted.
+  if (draining_posted) return;
+  draining_posted = true;
+  for (;;) {
+    std::vector<Callback<void()>> work;
+    {
+      const std::lock_guard lock(posted_mutex);
+      work.swap(posted);
+    }
+    if (work.empty()) break;
+    for (auto& fn : work) guarded([&] { fn(); });
   }
-  for (auto& fn : work) guarded([&] { fn(); });
+  draining_posted = false;
+}
+
+void AppState::stop_with(std::exception_ptr e) {
+  if (!pending_exception) pending_exception = e;
+  if (backend) backend->quit();
 }
 
 void AppState::schedule_removal(WidgetId id) { removals.push_back(id); }
 
 void AppState::flush_removals() {
+  if (dispatch_depth > 0) return;  // an outer event is still running; it flushes when it returns
   while (!removals.empty()) {
     std::vector<WidgetId> batch;
     batch.swap(removals);
@@ -49,6 +64,15 @@ void AppState::flush_removals() {
         continue;
       }
       if (auto* ws = window_state_of(*w)) {
+        // This calls into widgets (a cancelled press, a lost focus). Counted as a dispatch, so a
+        // removal they request joins this loop instead of starting a nested one.
+        ++dispatch_depth;
+        try {
+          ws->release_subtree(*w);
+        } catch (...) {
+          stop_with(std::current_exception());
+        }
+        --dispatch_depth;
         const Rect b = w->bounds();
         const float o = w->overflow();
         ws->invalidate({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o});
@@ -67,7 +91,9 @@ void AppState::window_closed(Window* w) {
   if (windows.empty() && running) backend->quit();
 }
 
-void AppState::reap_closed() { closing.clear(); }
+void AppState::reap_closed() {
+  if (dispatch_depth == 0) closing.clear();
+}
 
 void AppState::after_events() {
   flush_removals();  // removals requested outside any event (from setup code, say)
@@ -108,11 +134,17 @@ Ref<Window> App::open_window(const WindowOptions& options) {
 
 int App::run() {
   detail::AppState& s = *state_;
+  if (s.running) detail::contract_violation("App::run() was called while it is already running");
   s.flush_removals();
   s.reap_closed();
   if (s.windows.empty()) return s.exit_code;
   s.running = true;
-  s.backend->run();
+  try {
+    s.backend->run();
+  } catch (...) {
+    s.running = false;  // the backend's own failure; the App can still be run again
+    throw;
+  }
   s.running = false;
   s.reap_closed();
   if (s.pending_exception) {

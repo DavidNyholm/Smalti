@@ -1,17 +1,10 @@
 // The X11 backend, through Xlib. Wayland desktops run it through XWayland. v0.1 presents with
 // XPutImage (the CPU path); frames are paced by a timer at the display's refresh rate.
-#include <X11/XKBlib.h>
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#include <X11/Xresource.h>
-#include <X11/Xutil.h>
-#include <X11/cursorfont.h>
-#include <X11/keysym.h>
 #include <poll.h>
-#include <sys/eventfd.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -19,6 +12,15 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <X11/XKBlib.h>
+#include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <X11/Xresource.h>
+#include <X11/Xutil.h>
+#include <X11/cursorfont.h>
+#include <X11/keysym.h>
+#include <sys/eventfd.h>
 
 #include "platform/platform.hpp"
 
@@ -130,6 +132,7 @@ class X11Window final : public NativeWindow {
   static constexpr int64_t kFrameNs = static_cast<int64_t>(1e9 / kRefreshHz);
   void resize(int w, int h);
   void blit(int x, int y, int w, int h);
+  void release();  // frees whatever exists so far; the destructor, or a failed constructor
 
   X11Backend& backend_;
   WindowEvents& events_;
@@ -192,27 +195,39 @@ X11Window::X11Window(X11Backend& backend, const WindowOptions& options, WindowEv
                           static_cast<unsigned>(h), 0, CopyFromParent, InputOutput, CopyFromParent,
                           CWBackPixmap | CWEventMask, &attrs);
   if (!window_) throw std::runtime_error("smalti: XCreateWindow failed");
-  Atom delete_atom = backend_.atom("WM_DELETE_WINDOW");
-  XSetWMProtocols(display_, window_, &delete_atom, 1);
-  XSizeHints* hints = XAllocSizeHints();
-  hints->flags = PMinSize;
-  hints->min_width = static_cast<int>(options.min_size.width * scale_);
-  hints->min_height = static_cast<int>(options.min_size.height * scale_);
-  XSetWMNormalHints(display_, window_, hints);
-  XFree(hints);
-  gc_ = XCreateGC(display_, window_, 0, nullptr);
-  backend_.add(this);
-  set_title(options.title);
-  resize(w, h);
+  try {
+    Atom delete_atom = backend_.atom("WM_DELETE_WINDOW");
+    XSetWMProtocols(display_, window_, &delete_atom, 1);
+    if (XSizeHints* hints = XAllocSizeHints()) {
+      hints->flags = PMinSize;
+      hints->min_width = static_cast<int>(options.min_size.width * scale_);
+      hints->min_height = static_cast<int>(options.min_size.height * scale_);
+      XSetWMNormalHints(display_, window_, hints);
+      XFree(hints);
+    }
+    gc_ = XCreateGC(display_, window_, 0, nullptr);
+    set_title(options.title);
+    resize(w, h);
+    backend_.add(this);  // last: the backend never sees a half-made window
+  } catch (...) {
+    release();
+    throw;
+  }
 }
 
 X11Window::~X11Window() {
   backend_.forget(this);
+  release();
+}
+
+void X11Window::release() {
   if (image_) {
     image_->data = nullptr;  // the pixels belong to pixels_, not to Xlib
     XDestroyImage(image_);
+    image_ = nullptr;
   }
   if (gc_) XFreeGC(display_, gc_);
+  gc_ = nullptr;
   XDestroyWindow(display_, window_);
   XFlush(display_);
 }
@@ -254,6 +269,14 @@ void X11Window::resize(int w, int h) {
                         ZPixmap, 0, reinterpret_cast<char*>(pixels_.data()), static_cast<unsigned>(width_),
                         static_cast<unsigned>(height_), kBitsPerPixel, 0);
   if (!image_) throw std::runtime_error("smalti: XCreateImage failed (a 24-bit TrueColor display is required)");
+  // The layout the server will read must be the core's: 32-bit pixels in this machine's byte
+  // order, rows packed. Anything else would put garbage on screen.
+  const int native_order = std::endian::native == std::endian::little ? LSBFirst : MSBFirst;
+  if (image_->bits_per_pixel != kBitsPerPixel || image_->byte_order != native_order ||
+      image_->bytes_per_line != width_ * static_cast<int>(sizeof(uint32_t))) {
+    throw std::runtime_error(
+        "smalti: the X server's image format is not 32-bit pixels in host byte order");
+  }
   events_.on_resize(width_, height_, scale_);
 }
 
@@ -346,6 +369,17 @@ void X11Window::handle(XEvent& e) {
 // --- X11Backend -----------------------------------------------------------------------------
 
 X11Backend::X11Backend(Display* display, BackendHost& host) : display_(display), host_(host) {
+  // The core draws 0xAARRGGBB pixels and hands them to the server as they are, so the default
+  // visual must be TrueColor with 8-bit channels in that order (as on every common desktop).
+  // 16-bit and 30-bit visuals would need a conversion that does not exist yet.
+  const int screen = DefaultScreen(display_);
+  const Visual* v = DefaultVisual(display_, screen);
+  const int depth = DefaultDepth(display_, screen);
+  if (v->c_class != TrueColor || v->red_mask != 0xFF0000 || v->green_mask != 0x00FF00 ||
+      v->blue_mask != 0x0000FF || (depth != 24 && depth != 32)) {
+    throw std::runtime_error(
+        "smalti: the X display's default visual is not 24-bit TrueColor RGB, which is required");
+  }
   wake_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (wake_fd_ < 0) throw std::runtime_error("smalti: eventfd failed");
   // Held keys repeat as presses only, not as release-press pairs, so repeats can be told apart.
@@ -429,7 +463,12 @@ void X11Backend::run() {
 std::unique_ptr<PlatformBackend> create_x11_backend(BackendHost& host) {
   Display* d = XOpenDisplay(nullptr);
   if (!d) return nullptr;
-  return std::make_unique<X11Backend>(d, host);
+  try {
+    return std::make_unique<X11Backend>(d, host);
+  } catch (...) {
+    XCloseDisplay(d);  // the backend's destructor, which would close it, never ran
+    throw;
+  }
 }
 
 }  // namespace smalti::platform

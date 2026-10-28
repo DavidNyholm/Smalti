@@ -29,7 +29,7 @@ class GlyphCache {
   // The glyph's coverage relative to the pen's whole pixel on the baseline. Valid until the
   // next call, which may evict it.
   MaskView get(const Font& font, uint16_t glyph, float size, int quarter, float y_scale);
-  size_t bytes() const { return bytes_; }
+  size_t bytes() const { return bytes_; }  // coverage plus each entry's own bookkeeping
   size_t entries() const { return lru_.size(); }
 
  private:
@@ -49,6 +49,11 @@ class GlyphCache {
     int x, y, w, h;
     std::vector<uint8_t> coverage;
   };
+  // What an entry costs besides its coverage: itself, its list node and its index node (about;
+  // the exact node layout is the standard library's). Counting it bounds the number of entries
+  // too, so even glyphs with no pixels (spaces) cannot grow the cache without limit.
+  static constexpr size_t kEntryOverhead = sizeof(Entry) + sizeof(Key) + 6 * sizeof(void*);
+  static size_t cost(const Entry& e) { return e.coverage.size() + kEntryOverhead; }
   std::list<Entry> lru_;  // most recently used first
   std::unordered_map<Key, std::list<Entry>::iterator, KeyHash> index_;
   Rasterizer raster_;

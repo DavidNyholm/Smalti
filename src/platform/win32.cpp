@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -20,6 +21,11 @@ namespace smalti::platform {
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"smalti.window";
+constexpr wchar_t kWakeClass[] = L"smalti.wake";
+constexpr UINT kWakeMessage = WM_APP + 1;
+// MsgWaitForMultipleObjectsEx takes at most this many handles (one fewer than the usual limit:
+// the message queue counts as one).
+constexpr size_t kMaxWaitHandles = MAXIMUM_WAIT_OBJECTS - 1;
 constexpr float kDefaultDpi = 96.0f;
 constexpr UINT_PTR kModalLoopTimer = 1;     // keeps frames coming while a window is dragged
 constexpr double kFallbackRefreshHz = 60.0;
@@ -135,16 +141,26 @@ class Win32Window final : public NativeWindow {
   void attach(HWND hwnd) { hwnd_ = hwnd; }  // set while CreateWindowExW is still running
   // Runs the requested frame if this window's pacing allows it now.
   void run_frame_if_due(int64_t now);
-  // MsgWaitForMultipleObjects consumed this window's swap-chain signal: its frame is due.
+  // The event loop's wait consumed this window's swap-chain signal: the display can take a
+  // frame. The permission lasts until a frame is actually presented; a frame that turns out to
+  // have nothing to draw keeps it, or the window would wait for a signal that never comes.
   void mark_gpu_ready() { gpu_ready_ = true; }
+  bool waiting_for_gpu() const { return requested_ && gpu_ && !gpu_ready_; }
   HANDLE gpu_waitable() const { return gpu_ ? gpu_->frame_waitable() : nullptr; }
-  int64_t next_frame_due() const { return requested_ && !gpu_ ? last_frame_ + period_ns() : INT64_MAX; }
+  // When the requested frame may run: INT64_MAX when none is requested or it waits for the
+  // swap chain's signal (waited on separately), 0 when it may run now.
+  int64_t next_frame_due() const {
+    if (!requested_) return INT64_MAX;
+    if (gpu_) return gpu_ready_ ? 0 : INT64_MAX;
+    return last_frame_ + period_ns();
+  }
+  int64_t period_ns() const { return static_cast<int64_t>(1e9 / refresh_hz_); }
   void use_gpu(GpuDevice& device);
   HWND hwnd() const { return hwnd_; }
 
  private:
   LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
-  int64_t period_ns() const { return static_cast<int64_t>(1e9 / refresh_hz_); }
+  void release();  // frees whatever exists so far; the destructor, or a failed constructor
   void resize_buffers(int w, int h);
   void make_dib(int w, int h);
   void run_frame(int64_t now);
@@ -180,7 +196,7 @@ class Win32Backend final : public PlatformBackend {
   std::unique_ptr<NativeWindow> create_window(const WindowOptions& options, WindowEvents& events) override;
   void run() override;
   void quit() override { quit_ = true; }
-  void wake() override { SetEvent(wake_event_); }
+  void wake() override;
   int64_t now_ns() const override { return qpc_ns(); }
   SystemInfo system_info() const override;
 
@@ -191,13 +207,19 @@ class Win32Backend final : public PlatformBackend {
     if (!error_) error_ = e;
     quit_ = true;
   }
+  // Runs every window's frame that is due; also from inside Windows' own modal loops.
+  void run_due_frames();
+  void on_wake_message();
 
  private:
   void adopt_gpu_if_ready();
-  void run_due_frames();
 
   BackendHost& host_;
-  HANDLE wake_event_ = nullptr;
+  // Wakes arrive as a message to this message-only window, not as an event the loop waits on:
+  // Windows' own modal loops (moving, resizing, menus, message boxes) dispatch messages, so
+  // posted work keeps running while they spin.
+  HWND wake_window_ = nullptr;
+  std::atomic<bool> wake_posted_{false};
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
@@ -220,6 +242,15 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   return w ? w->dispatch(msg, wp, lp) : DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+LRESULT CALLBACK wake_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+  if (msg == kWakeMessage) {
+    if (auto* b = reinterpret_cast<Win32Backend*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+      b->on_wake_message();
+    return 0;
+  }
+  return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
 // --- Win32Window ----------------------------------------------------------------------------
 
 Win32Window::Win32Window(Win32Backend& backend, const WindowOptions& options, WindowEvents& events)
@@ -228,32 +259,44 @@ Win32Window::Win32Window(Win32Backend& backend, const WindowOptions& options, Wi
   hwnd_ = CreateWindowExW(0, kWindowClass, widen(options.title).c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
                           CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr, GetModuleHandleW(nullptr), this);
   if (!hwnd_) throw std::runtime_error("smalti: CreateWindowExW failed");
-  backend_.add(this);
-  // The size asked for is the client area in logical pixels, on whichever monitor the window
-  // landed on.
-  const UINT dpi = GetDpiForWindow(hwnd_);
-  scale_ = static_cast<float>(dpi) / kDefaultDpi;
-  RECT r{0, 0, static_cast<LONG>(std::lround(options.size.width * scale_)),
-         static_cast<LONG>(std::lround(options.size.height * scale_))};
-  AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
-  SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-  refresh_hz_ = refresh_hz(hwnd_);
-  RECT client;
-  GetClientRect(hwnd_, &client);
-  resize_buffers(client.right, client.bottom);
-  if (backend_.gpu()) use_gpu(*backend_.gpu());
+  try {
+    // The size asked for is the client area in logical pixels, on whichever monitor the window
+    // landed on.
+    const UINT dpi = GetDpiForWindow(hwnd_);
+    scale_ = static_cast<float>(dpi) / kDefaultDpi;
+    RECT r{0, 0, static_cast<LONG>(std::lround(options.size.width * scale_)),
+           static_cast<LONG>(std::lround(options.size.height * scale_))};
+    AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
+    SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    refresh_hz_ = refresh_hz(hwnd_);
+    RECT client;
+    GetClientRect(hwnd_, &client);
+    resize_buffers(client.right, client.bottom);
+    if (backend_.gpu()) use_gpu(*backend_.gpu());
+    backend_.add(this);  // last: the backend never sees a half-made window
+  } catch (...) {
+    release();  // the destructor will not run, and the HWND still points at this object
+    throw;
+  }
 }
 
 Win32Window::~Win32Window() {
   backend_.forget(this);
+  release();
+}
+
+void Win32Window::release() {
   SetWindowLongPtrW(hwnd_, GWLP_USERDATA, 0);  // no more messages reach this object
   gpu_.reset();
   DestroyWindow(hwnd_);
   if (mem_dc_) {
     SelectObject(mem_dc_, old_bitmap_);
     DeleteDC(mem_dc_);
+    mem_dc_ = nullptr;
   }
   if (dib_) DeleteObject(dib_);
+  dib_ = nullptr;
 }
 
 void Win32Window::make_dib(int w, int h) {
@@ -292,6 +335,7 @@ void Win32Window::use_gpu(GpuDevice& device) {
   if (gpu_) return;
   gpu_ = GpuSurface::create(device, hwnd_, width_, height_);
   if (!gpu_) return;
+  gpu_ready_ = false;  // a new swap chain signals its first frame itself
   // The DIB is no longer needed; the core redraws everything into the GPU path's buffer.
   if (dib_) {
     SelectObject(mem_dc_, old_bitmap_);
@@ -305,6 +349,7 @@ PixelBuffer Win32Window::frame_buffer() { return gpu_ ? gpu_->frame_buffer() : d
 
 void Win32Window::present(std::span<const RectI> dirty) {
   if (gpu_) {
+    gpu_ready_ = false;  // this Present spends the permission; the waitable signals the next
     if (gpu_->present(dirty)) return;
     gpu_.reset();  // the device was lost: fall back to GDI and draw everything again
     make_dib(width_, height_);
@@ -331,7 +376,7 @@ void Win32Window::run_frame_if_due(int64_t now) {
     // The swap chain's waitable object says the display can take a frame. Waiting on it uses
     // up the signal, so a signal the event loop already consumed is remembered separately.
     if (gpu_ready_ || WaitForSingleObject(gpu_->frame_waitable(), 0) == WAIT_OBJECT_0) {
-      gpu_ready_ = false;
+      gpu_ready_ = true;  // spent by present(), not here: the frame may draw nothing
       run_frame(now);
     }
   } else if (now >= last_frame_ + period_ns()) {
@@ -459,7 +504,10 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       KillTimer(hwnd_, kModalLoopTimer);
       return 0;
     case WM_TIMER:
-      if (wp == kModalLoopTimer) run_frame(backend_.now_ns());
+      if (wp == kModalLoopTimer) backend_.run_due_frames();  // every window, not just this one
+      return 0;
+    case WM_CAPTURECHANGED:
+      events_.on_capture_lost();  // also after our own release; the core ignores that one
       return 0;
     case WM_SETCURSOR:
       if (LOWORD(lp) == HTCLIENT) {
@@ -494,32 +542,62 @@ Win32Backend::Win32Backend(Presentation presentation, BackendHost& host) : host_
   // Per-monitor DPI awareness (v2) before any window exists. If the application's manifest has
   // already set an awareness, this fails harmlessly and the manifest wins.
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  wake_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-  frame_timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-  if (!frame_timer_) frame_timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);  // before Windows 10 1803
-  if (!wake_event_ || !frame_timer_) throw std::runtime_error("smalti: cannot create the event loop's handles");
-
   WNDCLASSEXW wc{sizeof wc};
   wc.style = CS_DBLCLKS;
   wc.lpfnWndProc = window_proc;
   wc.hInstance = GetModuleHandleW(nullptr);
   wc.lpszClassName = kWindowClass;
   RegisterClassExW(&wc);  // fails harmlessly if a previous App registered it
+  WNDCLASSEXW wake_class{sizeof wake_class};
+  wake_class.lpfnWndProc = wake_proc;
+  wake_class.hInstance = wc.hInstance;
+  wake_class.lpszClassName = kWakeClass;
+  RegisterClassExW(&wake_class);
+
+  frame_timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                        TIMER_ALL_ACCESS);
+  if (!frame_timer_)
+    frame_timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);  // before Windows 10 1803
+  wake_window_ = CreateWindowExW(0, kWakeClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                 wc.hInstance, nullptr);
+  if (!frame_timer_ || !wake_window_) {
+    if (frame_timer_) CloseHandle(frame_timer_);
+    if (wake_window_) DestroyWindow(wake_window_);
+    throw std::runtime_error("smalti: cannot create the event loop's handles");
+  }
+  SetWindowLongPtrW(wake_window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
   if (presentation == Presentation::automatic) {
     // The device costs hundreds of milliseconds on some drivers; the first frames do not wait.
     gpu_thread_ = std::thread([this] {
       gpu_pending_ = GpuDevice::create();
       gpu_done_ = true;
-      SetEvent(wake_event_);
+      wake();
     });
   }
 }
 
 Win32Backend::~Win32Backend() {
   if (gpu_thread_.joinable()) gpu_thread_.join();
+  DestroyWindow(wake_window_);  // a wake still queued for it is dropped with it
   CloseHandle(frame_timer_);
-  CloseHandle(wake_event_);
+}
+
+void Win32Backend::wake() {
+  // One message in the queue is enough however many wakes there are; on_wake drains all work.
+  if (wake_posted_.exchange(true)) return;
+  if (!PostMessageW(wake_window_, kWakeMessage, 0, 0))
+    wake_posted_ = false;  // a full queue: the next wake retries
+}
+
+void Win32Backend::on_wake_message() {
+  wake_posted_ = false;  // before draining: work posted from now on needs a new message
+  try {
+    adopt_gpu_if_ready();
+    host_.on_wake();
+  } catch (...) {
+    capture(std::current_exception());
+  }
 }
 
 std::unique_ptr<NativeWindow> Win32Backend::create_window(const WindowOptions& options, WindowEvents& events) {
@@ -560,33 +638,44 @@ void Win32Backend::run() {
   std::vector<HANDLE> handles;
   std::vector<Win32Window*> owners;  // the window behind each handle, or nullptr
   while (!quit_) {
-    // Wait for: a wake-up, the CPU-path frame timer, or a GPU window ready for its frame.
-    handles.assign(1, wake_event_);
-    owners.assign(1, nullptr);
+    // Wait for: a message (input, or a wake), the CPU-path frame timer, or a GPU window's swap
+    // chain ready for its frame.
+    handles.clear();
+    owners.clear();
+    const int64_t now = now_ns();
     int64_t due = INT64_MAX;
     for (Win32Window* w : windows_) {
-      due = std::min(due, w->next_frame_due());
-      if (w->frame_requested() && w->gpu_waitable()) {
+      if (!w->waiting_for_gpu()) {
+        due = std::min(due, w->next_frame_due());
+      } else if (handles.size() + 1 < kMaxWaitHandles) {  // one place stays free for the timer
         handles.push_back(w->gpu_waitable());
         owners.push_back(w);
+      } else {
+        // More windows than the wait can take: poll this one at its refresh rate.
+        due = std::min(due, now + w->period_ns());
       }
     }
-    if (due != INT64_MAX) {
-      const int64_t wait_ns = std::max<int64_t>(0, due - now_ns());
+    DWORD timeout = INFINITE;
+    if (due <= now) {
+      timeout = 0;  // a frame may run already: just collect what is waiting
+    } else if (due != INT64_MAX) {
       LARGE_INTEGER rel;
-      rel.QuadPart = -std::max<int64_t>(1, wait_ns / 100);  // relative, in 100 ns units
+      rel.QuadPart = -std::max<int64_t>(1, (due - now) / 100);  // relative, in 100 ns units
       SetWaitableTimer(frame_timer_, &rel, 0, nullptr, nullptr, FALSE);
       handles.push_back(frame_timer_);
       owners.push_back(nullptr);
     }
-    const DWORD r = MsgWaitForMultipleObjectsEx(static_cast<DWORD>(handles.size()), handles.data(), INFINITE,
-                                                QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-    if (r == WAIT_OBJECT_0) {
-      adopt_gpu_if_ready();
-      host_.on_wake();
-    } else if (r > WAIT_OBJECT_0 && r < WAIT_OBJECT_0 + handles.size() && owners[r - WAIT_OBJECT_0]) {
-      owners[r - WAIT_OBJECT_0]->mark_gpu_ready();
+    const DWORD r = MsgWaitForMultipleObjectsEx(static_cast<DWORD>(handles.size()), handles.data(),
+                                                timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+    if (r == WAIT_FAILED) {
+      // Not retried: a wait that fails once fails every time, and retrying would spin.
+      capture(std::make_exception_ptr(
+          std::runtime_error("smalti: MsgWaitForMultipleObjectsEx failed (error " +
+                             std::to_string(GetLastError()) + ")")));
+      break;
     }
+    if (r < WAIT_OBJECT_0 + handles.size() && owners[r - WAIT_OBJECT_0])
+      owners[r - WAIT_OBJECT_0]->mark_gpu_ready();
     MSG msg;
     while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
       if (msg.message == WM_QUIT) quit_ = true;

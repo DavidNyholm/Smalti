@@ -66,11 +66,13 @@ TEST(raster_clipping_left_right_and_diagonal) {
   CHECK_EQ(m.w, 4);
   m = r.fill(rect(0, 0, 10, 10), {}, {0, 0, 3, 100});
   CHECK_NEAR(area(m), 30.0, 0.05);
+  // The slanted edge crosses x = 0 at y = 4.5, halfway down a pixel row: the part left of the
+  // clip must count as a vertical edge on the border from there, not be smeared into the row.
   Path wedge;
   wedge.move_to({-5, 0});
-  wedge.line_to({5, 10});
+  wedge.line_to({5, 9});
   wedge.line_to({5, 0});
-  CHECK_NEAR(area(r.fill(wedge, {}, {0, 0, 100, 100})), 37.5, 0.05);
+  CHECK_NEAR(area(r.fill(wedge, {}, {0, 0, 100, 100})), 33.75, 0.05);  // 0.9 * (x + 5) over [0, 5]
   CHECK(r.fill(rect(0, 0, 10, 10), {}, {50, 50, 10, 10}).empty());  // entirely outside
 }
 

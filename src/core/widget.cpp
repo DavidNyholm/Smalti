@@ -11,6 +11,13 @@ namespace smalti {
 
 namespace {
 
+// A widget built before it was added (a composite that adds children in its constructor) has
+// descendants that do not know their window yet; they learn it with their root.
+void attach(Widget& w, Window* window) {
+  detail::Tree::set_window(w, window);
+  for (auto& child : w.children()) attach(*child, window);
+}
+
 float ease(Easing e, float t) {
   switch (e) {
     case Easing::linear: return t;
@@ -51,7 +58,7 @@ void Widget::adopt(std::unique_ptr<Widget> child) {
                                "Grid, Card or Window instead");
   }
   child->parent_ = this;
-  child->window_ = window_;
+  attach(*child, window_);
   children_.push_back(std::move(child));
   invalidate_layout();
 }
@@ -86,14 +93,17 @@ void Widget::set_column_span(int columns) {
 void Widget::set_visible(bool visible) {
   if (visible_ == visible) return;
   visible_ = visible;
+  if (!visible) {
+    if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);
+  }
   invalidate_layout();
 }
 
 void Widget::set_enabled(bool enabled) {
   if (enabled_ == enabled) return;
   enabled_ = enabled;
-  if (!enabled && has_focus()) {
-    if (auto* ws = detail::window_state_of(*this)) ws->focus(nullptr);
+  if (!enabled) {
+    if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);
   }
   invalidate();
 }

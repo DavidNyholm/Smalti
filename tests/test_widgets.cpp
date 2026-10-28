@@ -37,6 +37,7 @@ TEST(button_works_from_the_keyboard_and_tab_moves_focus) {
   auto first = col->add<Button>("First");
   col->add<Label>("not focusable");
   auto second = col->add<Button>("Second");
+  col->add<Button>("Third");  // three, so a step back and a step forward differ
   int a = 0, b = 0;
   first->on_click([&] { ++a; });
   second->on_click([&] { ++b; });
@@ -51,8 +52,8 @@ TEST(button_works_from_the_keyboard_and_tab_moves_focus) {
   CHECK_EQ(b, 1);
   d.key(Key::tab, {true});  // shift+tab goes back
   CHECK(first->has_focus());
+  d.key(Key::tab, {true});  // and wraps around to the last
   d.key(Key::tab);
-  d.key(Key::tab);  // wraps around
   CHECK(first->has_focus());
 }
 

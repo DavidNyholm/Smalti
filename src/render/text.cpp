@@ -83,13 +83,13 @@ MaskView GlyphCache::get(const Font& font, uint16_t glyph, float size, int quart
   const MaskView m = raster_.fill(outline_, t, {-kUnbounded, -kUnbounded, 2 * kUnbounded, 2 * kUnbounded});
   Entry entry{key, m.x, m.y, m.w, m.h, {}};
   if (!m.empty()) entry.coverage.assign(m.coverage, m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h));
-  bytes_ += entry.coverage.size();
+  bytes_ += cost(entry);
   lru_.push_front(std::move(entry));
   index_.emplace(key, lru_.begin());
   // Keep the newest entry even if it alone exceeds the budget; evict from the cold end.
   while (bytes_ > budget_ && lru_.size() > 1) {
     const Entry& cold = lru_.back();
-    bytes_ -= cold.coverage.size();
+    bytes_ -= cost(cold);
     index_.erase(cold.key);
     lru_.pop_back();
   }

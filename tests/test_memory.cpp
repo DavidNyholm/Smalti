@@ -36,6 +36,8 @@ TEST(memory_widget_churn_returns_to_baseline) {
     if (round % 50 == 0) d.frame();  // lay out and paint some of them
     col->remove();
     d.idle();
+    if (app.memory_stats().widgets != baseline)
+      break;  // a leak shows at once; no need to pile up 2000
   }
   CHECK_EQ(app.memory_stats().widgets, baseline);
 }
@@ -50,6 +52,7 @@ TEST(memory_window_churn_returns_to_baseline) {
     testing::Driver d(win);
     win->close();
     testing::Driver(keep).frame();  // the close is processed at the next safe point
+    if (app.memory_stats().widgets != baseline) break;
   }
   CHECK_EQ(app.memory_stats().widgets, baseline);
 }

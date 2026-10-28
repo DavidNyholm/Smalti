@@ -2,6 +2,7 @@
 // unique_ptr, a file). std::move_only_function would do, but it is C++23.
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -17,10 +18,20 @@ class Callback<R(Args...)> {
   Callback() = default;
   template <class F>
     requires(!std::is_same_v<std::decay_t<F>, Callback> && std::is_invocable_r_v<R, F&, Args...>)
-  Callback(F&& f) : impl_(std::make_unique<Impl<std::decay_t<F>>>(std::forward<F>(f))) {}
+  Callback(F&& f) : impl_(std::make_shared<Impl<std::decay_t<F>>>(std::forward<F>(f))) {}
+  Callback(Callback&&) noexcept = default;
+  Callback& operator=(Callback&&) noexcept = default;
+  Callback(const Callback&) = delete;
+  Callback& operator=(const Callback&) = delete;
 
   explicit operator bool() const { return impl_ != nullptr; }
-  R operator()(Args... args) const { return impl_->call(std::forward<Args>(args)...); }
+
+  // The running callable is kept alive until it returns, so a callback may replace or clear
+  // the Callback that is calling it (a click handler that installs a new click handler).
+  R operator()(Args... args) const {
+    const std::shared_ptr<Base> running = impl_;
+    return running->call(std::forward<Args>(args)...);
+  }
 
  private:
   struct Base {
@@ -30,10 +41,18 @@ class Callback<R(Args...)> {
   template <class F>
   struct Impl final : Base {
     explicit Impl(F f) : fn(std::move(f)) {}
-    R call(Args... args) override { return fn(std::forward<Args>(args)...); }
+    R call(Args... args) override {
+      if constexpr (std::is_void_v<R>) {
+        std::invoke(fn, std::forward<Args>(args)...);  // a result the signature has no room for
+      } else {
+        return std::invoke(fn, std::forward<Args>(args)...);
+      }
+    }
     F fn;
   };
-  std::unique_ptr<Base> impl_;
+  // shared, not unique, only so operator() can hold the callable while it runs; a Callback
+  // itself cannot be copied.
+  std::shared_ptr<Base> impl_;
 };
 
 }  // namespace smalti

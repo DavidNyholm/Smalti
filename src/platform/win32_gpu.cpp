@@ -36,6 +36,13 @@ struct GpuDeviceImpl {
 };
 
 struct GpuSurfaceImpl {
+  GpuSurfaceImpl() = default;
+  GpuSurfaceImpl(const GpuSurfaceImpl&) = delete;
+  GpuSurfaceImpl& operator=(const GpuSurfaceImpl&) = delete;
+  ~GpuSurfaceImpl() {
+    if (waitable) CloseHandle(waitable);  // owned from the moment it is acquired
+  }
+
   GpuDeviceImpl* dev = nullptr;
   HWND hwnd = nullptr;
   ComPtr<IDXGISwapChain2> swap;
@@ -78,9 +85,7 @@ std::unique_ptr<GpuDevice> GpuDevice::create() {
 
 GpuSurface::GpuSurface(std::unique_ptr<GpuSurfaceImpl> impl) : impl_(std::move(impl)) {}
 
-GpuSurface::~GpuSurface() {
-  if (impl_ && impl_->waitable) CloseHandle(impl_->waitable);
-}
+GpuSurface::~GpuSurface() = default;
 
 std::unique_ptr<GpuSurface> GpuSurface::create(GpuDevice& device, HWND hwnd, int width, int height) {
   auto s = std::make_unique<GpuSurfaceImpl>();

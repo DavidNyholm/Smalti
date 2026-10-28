@@ -102,6 +102,11 @@ Spacer::Spacer(float stretch, float size) : size_(size) { set_stretch(stretch); 
 
 Size Spacer::measure(Size) { return {size_, size_}; }
 
+Grid::Grid(GridOptions options) : options_(std::move(options)) {
+  if (options_.columns.empty())
+    options_.columns.push_back(GridTrack::stretch());  // one column that fills
+}
+
 std::vector<Grid::Cell> Grid::place() const {
   std::vector<Cell> cells;
   const int columns = std::max<int>(1, static_cast<int>(options_.columns.size()));
@@ -130,12 +135,36 @@ std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float wid
   }
   // Fit columns (and stretch columns when there is no width to share) take their widest child.
   const bool share = width < kUnbounded * 0.5f && weight_total > 0;
+  const auto content_sized = [&](size_t c) {
+    const GridTrack::Kind k = options_.columns[c].kind;
+    return k == GridTrack::Kind::fit || (k == GridTrack::Kind::stretch && !share);
+  };
   for (const Cell& cell : cells) {
     if (cell.span != 1) continue;
-    const GridTrack& t = options_.columns[static_cast<size_t>(cell.column)];
-    if (t.kind == GridTrack::Kind::fit || (t.kind == GridTrack::Kind::stretch && !share)) {
+    const size_t c = static_cast<size_t>(cell.column);
+    if (content_sized(c)) {
       const Size s = max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size());
-      widths[static_cast<size_t>(cell.column)] = std::max(widths[static_cast<size_t>(cell.column)], s.width);
+      widths[c] = std::max(widths[c], s.width);
+    }
+  }
+  // A spanning child wider than the columns it covers widens the content-sized ones among them,
+  // evenly. Fixed columns keep their width; shared stretch columns get theirs below.
+  for (const Cell& cell : cells) {
+    if (cell.span == 1) continue;
+    const size_t first = static_cast<size_t>(cell.column),
+                 last = first + static_cast<size_t>(cell.span);
+    float have = options_.column_spacing * static_cast<float>(cell.span - 1);
+    int growable = 0;
+    for (size_t c = first; c < last; ++c) {
+      have += widths[c];
+      if (content_sized(c)) ++growable;
+    }
+    const float need =
+        max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size()).width;
+    if (need <= have || growable == 0) continue;
+    const float extra = (need - have) / static_cast<float>(growable);
+    for (size_t c = first; c < last; ++c) {
+      if (content_sized(c)) widths[c] += extra;
     }
   }
   for (size_t c = 0; c < options_.columns.size(); ++c) {
