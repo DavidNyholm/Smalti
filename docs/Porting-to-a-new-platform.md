@@ -25,6 +25,7 @@ A platform is two classes in `src/platform/platform.hpp`: `PlatformBackend` (the
 - A window is destroyed by the core, never by the backend; the close button only calls `on_close_request`.
 - After each batch of OS events, call `BackendHost::after_events()`, outside any window procedure: that is where closed windows are destroyed.
 - `wake()` is the only call that may come from another thread. Where the platform has modal loops of its own (Windows moving a window, a native message box), deliver the wake so that those loops run it too; on Windows it is a message to a message-only window.
+- When the frame buffer is replaced (a resize), make the new one before releasing the old: the core draws into the old one until `on_resize` hands it the new one. If making it fails, report `on_resize` with an empty buffer before letting the error out.
 - Register a window with the backend only once it is completely built. If its constructor throws, the destructor does not run: release what was already created (on Windows, also detach the object from its window handle) before rethrowing.
 - Nothing may throw through the operating system's callbacks.
 

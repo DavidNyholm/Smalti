@@ -37,5 +37,5 @@ Normal frames redraw only what changed: a hover redraws one button, a fraction o
 
 ## Animation
 
-- A continuously animating indeterminate progress bar at 165 frames per second costs about 6% of one core in the gallery.
+- A continuously animating indeterminate progress bar at 165 frames per second costs about 7% of one core in the gallery (6.4 to 7.7% over five 10-second runs).
 - A scrolling prototype at 165 Hz and 3440 pixels wide had a median frame interval of exactly one refresh, and the display repeated a frame on 0 to 4% of refreshes across runs on a busy machine (counted with DXGI's frame statistics). Scrolling as a widget arrives in v0.3.

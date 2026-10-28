@@ -13,12 +13,12 @@ A memory leak rarely crashes a program by itself; it makes the program grow unti
 - **One UI thread, enforced** on every `Ref` access (one comparison, so it stays in release builds).
 - **Exceptions never cross the operating system.**
 - **Budgets.** The glyph cache has a byte limit (4 MB by default) with least-recently-used eviction; `app.memory_stats()` reports frame buffers, caches and GPU textures.
-- **Untrusted bytes in one place in v0.1:** font files, through a bounds-checked reader. Every read is checked against the file's length, and one glyph's outline is limited in how many parts and points it may expand to, so a small hostile font cannot multiply itself into gigabytes. Tested with damaged copies of Inter and with fonts built by hand to be hostile.
+- **Untrusted bytes in one place in v0.1:** font files, through a bounds-checked reader. Every read is checked against the file's length, and one glyph's outline is limited in how many parts and points it may expand to, so a small hostile font cannot multiply itself into gigabytes. Kerning tables are read with limits on how much they may reference, and a glyph over a million pixels is not drawn. Tested with damaged copies of Inter and with fonts built by hand to be hostile.
 - **No allocation per frame.** Once a screen has been drawn once, animating it allocates nothing, as long as its text fits in the glyph cache's budget (tested). A screen showing more distinct glyphs than the budget holds evicts and re-renders some every frame, and those allocate.
 
 ## Contract violations
 
-A contract violation (a dead `Ref`, a call from another thread, `add<T>()` on a widget that takes no children) calls the contract handler. The default prints the message and aborts; `set_contract_handler()` replaces it. Tests install one that throws.
+A contract violation (a dead `Ref`, a call from another thread, `add<T>()` on a widget that takes no children or while the window is laying out or painting, `run()` while it is running) calls the contract handler. The default prints the message and aborts; `set_contract_handler()` replaces it. Tests install one that throws.
 
 ## What this does not promise
 

@@ -4,14 +4,14 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 63 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 79 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
-- **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups.
+- **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
 - **Lifetimes:** dead `Ref`s are reported and never dereferenced, slot reuse does not revive old `Ref`s, widgets remove themselves from their own callbacks, calls from another thread are refused, 2,000 rounds of building and removing controls and 300 windows opened and closed return to the starting widget count.
 - **Layout, widgets and motion:** stacks, grids, every control by mouse and keyboard, focus order, animations that settle and then request no more frames.
-- **Memory:** an `operator new` counter shows that an animated frame allocates nothing once warm.
-- **Review regressions:** `tests/test_review.cpp`, one test per defect found in review (below).
+- **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much.
+- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) and `tests/test_review2.cpp` (round 2: 16 tests). See below.
 
 ```bash
 cmake --preset windows
@@ -37,15 +37,19 @@ cmake --build --preset linux-asan
 
 ## Injected bugs
 
-A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus ten that each undo one of the review fixes below.
+A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus eighteen that each undo one of the review fixes below.
 
-Result on the current sources, MSVC Debug: **42 of 42 caught**, by a failing test or a crashing test binary, none by a time-out. The first run after the review fixes caught 37. Every miss involved an older test or an injected bug, not a review fix, and each has been put right:
+Result on the current sources, MSVC Debug: **50 of 50 caught**, by a failing test or a crashing test binary, none by a time-out.
+
+Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
 - Shift+Tab moving forwards went unseen because the test had only two focusable widgets, where one step back and one step forward land on the same one.
 - One injected bug removed a clamp that a second clamp makes redundant, so it changed nothing. It now removes the split of an edge where it crosses the clip's border, and the test's edge crosses that border halfway down a pixel row, where the split matters (before, it crossed exactly on a row boundary, where it does not).
 - A UTF-8 lead byte followed by a plain letter was never tested.
 - Removed widgets that are never destroyed made the churn test grind through all 2,000 rounds until it timed out; it now stops at the first leaked round.
 - One injected bug itself was faulty: on MSVC, `v = {}` keeps a vector's memory, so it changed nothing.
+
+After round 2, one injected bug (posted work never running) made a new test hang instead of fail: it kept an animation running while it waited. It now asks for frames only as its job progresses, so without posted work it ends at once and fails.
 
 ```bash
 python tools/mutate.py --preset windows
@@ -56,7 +60,11 @@ The second form runs only the bugs whose description contains the given text. A 
 
 ## Review
 
-Before its release, v0.1 had an independent code review: a read-only pass over the whole source by a reviewer asked to act as a hostile senior engineer, with each finding stated as a concrete failure scenario. It reported 25 defects: one blocker, twelve major, twelve minor. All 25 are fixed. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+Before its release, v0.1 had two rounds of independent code review: read-only passes over the whole source by a reviewer asked to act as a hostile senior engineer, with each finding stated as a concrete failure scenario. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+
+### Round 1
+
+It reported 25 defects: one blocker, twelve major, twelve minor. All 25 were fixed. Round 2 judged 18 of those fixes complete and 7 incomplete; the incomplete ones are finished in round 2 below.
 
 | # | Defect | Fix | Checked by |
 |---|---|---|---|
@@ -87,3 +95,32 @@ Before its release, v0.1 had an independent code review: a read-only pass over t
 | 25 | A failed GPU surface creation leaked a handle. | The handle is owned from the moment it is acquired. | By reading |
 
 The review also confirmed, among other things, that ordinary self-removal and window closing were already safe, that a stale `Ref` never touches freed memory, and that exceptions never unwind through the operating system.
+
+### Round 2
+
+The second round reviewed the round-1 fixes and the rest of the code again. It reported 21 defects (twelve major, nine minor): gaps in seven round-1 fixes, new defects some of those fixes introduced, and older ones round 1 missed. One (an injected bug that no longer applied) had been fixed already; the other 20 are fixed now, 16 of them with a test in `tests/test_review2.cpp` that failed first, two of those under ASan.
+
+| # | Defect | Fix | Checked by |
+|---|---|---|---|
+| 1 | A setter called outside any event (`set_enabled(false)` during a press) sent a cancel whose handler could run a nested loop and free the widget while the setter still used it. | Setters that call into widgets count as event dispatch for their whole length. | Test, under ASan |
+| 2 | A `paint()` that ran a nested loop could get a frame of its own window drawn inside the current one, sharing its damage list. | A window never draws a frame inside a frame; the nested one is drawn next. | Test |
+| 3 | A widget added from `measure()` or `paint()` could reallocate the child list that layout or painting was walking. | That is a contract violation now, and layout no longer holds references into the list. | Test |
+| 4 | Changing a wrapped `Label`'s text while painting left its cut lines pointing into the freed text. | The lines are dropped with the text and cut again at the next layout. | Test, under ASan |
+| 5 | A failed frame buffer resize (out of memory) left the core drawing into freed pixels, on Windows and X11. | The new buffer is made before the old one goes; if that fails, the core is told it has none, and Windows stops drawing until the error is rethrown. | By reading; the failure cannot be injected yet. |
+| 6 | Posted work that keeps posting its next piece kept the loop from ever drawing or reading input. | Each wake runs only what was posted before it; Windows handles at most 64 messages per turn. | Test |
+| 7 | On Windows, a wake whose message could not be posted (a full queue) left the work queued until some later post. | The loop, and the drag timer, run the work themselves when that happens. | By reading |
+| 8 | A press whose own handler disabled its widget (a slider's `on_change`) still captured the mouse, and the drag resumed when it was re-enabled. | The press is cancelled at once. | Test |
+| 9 | On X11, minimising a window during a press never ended the press. | Unmapping the window cancels it. | By reading |
+| 10 | A 'kern' feature record repeated thousands of times, all pointing at one feature table, made the reader store billions of lookup references. | Each feature table is read once into a set of lookups, with limits on references and subtables. | Test (bytes allocated) |
+| 11 | A glyph thousands of pixels wide (a tiny units-per-em and huge coordinates) was rasterized whatever it cost: gigabytes before the cache budget applied. | Glyphs over a million pixels are not drawn. | Test (bytes allocated) |
+| 12 | A `paint()` that threw lost the damage of that frame, leaving stale pixels after the app recovered. | A frame cut short redraws everything next time. | Test |
+| 13 | `focus()` accepted a widget inside a hidden container. | It checks visibility and enabled state all the way up. | Test |
+| 14 | The round-1 span fix gave a fit column all of a spanning header's width, squeezing a stretch column beside it to nothing. | A span over a stretch column leaves the width to that column. | Test |
+| 15 | Kerning summed across lookups was cached in 16 bits, so the second answer differed from the first. | The sum is clamped to 16 bits before it is returned or cached. | Test |
+| 16 | Pressing and releasing another mouse button during a press ended the press, and the click was lost. | One press at a time, ended only by its own button. | Test |
+| 17 | A card's shadow inside a row was cut off when a repaint touched the shadow but not the row. | A parent outside the repaint area no longer hides its children. | Test (pixels) |
+| 18 | Overlong UTF-8, surrogates and values past U+10FFFF decoded as characters. | They decode to U+FFFD. | Test |
+| 19 | A headless-only install still asked its users for X11. | The installed package names only what was built. | Generated configs checked for both builds. |
+| 21 | The README said every call checks the UI thread; `App`'s own methods did not. | They do now, except `App::post`. | Test |
+
+After both rounds, `hello` on the GPU path still shows "Clicked 3 times." after three clicks and idles at 0.0% CPU, and the animating gallery measured 6.4 to 7.7% of one core over five 10-second runs, against 6.7 to 8.6% for the round-1 build, alternating on the same machine: no difference that this machine's noise lets through.

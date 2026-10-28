@@ -164,7 +164,6 @@ TEST(review2_changing_a_wrapped_label_while_painting_reads_no_freed_text) {
 TEST(review2_posted_work_that_keeps_coming_does_not_starve_frames) {
   App app(headless());
   auto win = app.open_window({"t", {200, 100}});
-  win->add<Column>()->add<ProgressBar>()->set_indeterminate(true);  // always wants frames
   testing::Driver d(win);
   int runs = 0, frames_between = 0, last_frames = d.frames_drawn();
   Callback<void()>* again = nullptr;
@@ -172,6 +171,7 @@ TEST(review2_posted_work_that_keeps_coming_does_not_starve_frames) {
     ++runs;
     if (d.frames_drawn() != last_frames) ++frames_between;
     last_frames = d.frames_drawn();
+    win->invalidate();  // wants a frame, as a job showing its progress would
     if (runs < 100)
       app.post([&] { (*again)(); });  // the continuation of a long job
     else

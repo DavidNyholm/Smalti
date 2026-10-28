@@ -24,12 +24,13 @@ Posted work runs in the order it was posted. On Windows it arrives as a window m
 Each event has one callback, set with `on_click`, `on_change`, `on_select`. Callbacks are move-only (`smalti::Callback`), so they may own what they capture.
 
 - **A callback may remove its own widget, its parent, or close its window.** Removal happens once the outermost event has been handled, so no code ever runs inside a destroyed object. That holds when a callback runs a nested event loop (a native message box) too: events handled inside it cannot destroy a widget whose handler is still on the stack.
+- **Widgets are added from events and posted functions,** not from `measure()`, `arrange()` or `paint()`: adding while the window lays out or paints is a contract violation.
 - **A callback may replace itself.** `button->on_click(...)` from inside the button's own click handler is fine; the running handler stays alive until it returns.
 - **An exception thrown by a callback** stops the loop and is rethrown from `app.run()`. It never unwinds through the operating system.
 
 ## Mouse presses and focus
 
-A press goes to the widget under the pointer and stays with it until the button is released, wherever the pointer goes. If the widget is hidden, disabled or removed first, or the system takes the mouse away (another window grabs it), the press ends with `MouseEvent::Kind::cancel` instead of a release: undo whatever the press started, and do not act on it.
+A press goes to the widget under the pointer and stays with it until that button is released, wherever the pointer goes. There is one press at a time: other buttons are ignored until it ends. If the widget is hidden, disabled or removed first (by its own press handler too), or the system takes the mouse away (another window grabs it, or the window is minimised), the press ends with `MouseEvent::Kind::cancel` instead of a release: undo whatever the press started, and do not act on it.
 
 A widget that is hidden or disabled, or sits inside a container that is, loses keyboard focus, and keys never reach it.
 
