@@ -15,14 +15,23 @@ std::thread worker([&app, status] {
 
 ## The loop
 
-`app.run()` sleeps in the operating system (`MsgWaitForMultipleObjectsEx` on Windows, `poll` on Linux) until input, a requested frame, or posted work arrives. There is no polling and no frame loop: a window that is not animating draws nothing and uses no CPU. `run()` returns when the last window closes or `app.quit()` is called.
+`app.run()` sleeps in the operating system (`MsgWaitForMultipleObjectsEx` on Windows, `poll` on Linux) until input, a requested frame, or posted work arrives. There is no polling and no frame loop: a window that is not animating draws nothing and uses no CPU. `run()` returns when the last window closes or `app.quit()` is called. Calling `run()` again while it is running is a contract violation.
+
+Posted work runs in the order it was posted. On Windows it arrives as a window message, so it also runs while the system's own loops are spinning: while a window is moved or resized, a menu is open, or a message box is up. A posted function that itself runs such a loop holds back later posted work until it returns, so the order is never broken.
 
 ## Callbacks
 
 Each event has one callback, set with `on_click`, `on_change`, `on_select`. Callbacks are move-only (`smalti::Callback`), so they may own what they capture.
 
-- **A callback may remove its own widget, its parent, or close its window.** Removal happens once the event has been handled, so no code ever runs inside a destroyed object.
+- **A callback may remove its own widget, its parent, or close its window.** Removal happens once the outermost event has been handled, so no code ever runs inside a destroyed object. That holds when a callback runs a nested event loop (a native message box) too: events handled inside it cannot destroy a widget whose handler is still on the stack.
+- **A callback may replace itself.** `button->on_click(...)` from inside the button's own click handler is fine; the running handler stays alive until it returns.
 - **An exception thrown by a callback** stops the loop and is rethrown from `app.run()`. It never unwinds through the operating system.
+
+## Mouse presses and focus
+
+A press goes to the widget under the pointer and stays with it until the button is released, wherever the pointer goes. If the widget is hidden, disabled or removed first, or the system takes the mouse away (another window grabs it), the press ends with `MouseEvent::Kind::cancel` instead of a release: undo whatever the press started, and do not act on it.
+
+A widget that is hidden or disabled, or sits inside a container that is, loses keyboard focus, and keys never reach it.
 
 ## Frames and motion
 

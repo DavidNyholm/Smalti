@@ -12,7 +12,7 @@ What smalti costs, measured on one Windows 11 desktop with an NVIDIA graphics ca
 
 Most of the GPU path's memory is the graphics driver's: creating a Direct3D 11 device costs about 50 MB of private memory on this machine before anything is drawn; smalti's own share is a few megabytes plus its frame buffers (width x height x 4 bytes each). `AppOptions{.presentation = Presentation::cpu}` never creates the device, for the smallest footprint.
 
-Measured with the process's private bytes and working set (Windows task manager counters) after the window settled; Electron's figures are the sum over its processes.
+Measured with the process's private bytes and working set (Windows task manager counters) after the window settled; Electron's figures are the sum over its processes. The idle figures are these desktop measurements; the tests check the mechanism behind them (once motion settles, no frame is requested), not the CPU time itself.
 
 ## Startup
 
@@ -33,7 +33,7 @@ A full redraw (what a resize costs) of a busy reference screen with shadows, gra
 Normal frames redraw only what changed: a hover redraws one button, a fraction of a millisecond.
 
 - **Soft shadows:** computing the full integral per pixel took about 100 ms per full redraw. The closed-form edges and cached corner tiles brought it down 7 to 8 times; the result matches the direct computation to within one step in 255 (tested).
-- **No allocation per frame:** once a screen has been drawn, animating it performs no heap allocation (tested by counting `operator new` calls).
+- **No allocation per frame:** once a screen has been drawn, animating it performs no heap allocation, as long as its glyphs fit in the glyph cache's budget (tested by counting `operator new` calls). A working set of glyphs larger than the budget is evicted and re-rendered, and that allocates.
 
 ## Animation
 

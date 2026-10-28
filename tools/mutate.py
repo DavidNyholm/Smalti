@@ -101,7 +101,8 @@ MUTATIONS = [
         "the default minimum size overrides a smaller requested size",
         [
             (
-                "  n.min_size = {std::min(o.min_size.width, o.size.width), std::min(o.min_size.height, o.size.height)};",
+                "  n.min_size = {std::min(o.min_size.width, o.size.width),\n"
+                "                std::min(o.min_size.height, o.size.height)};",
                 "  n.min_size = o.min_size;",
             )
         ],
@@ -206,7 +207,7 @@ MUTATIONS = [
     (
         "widgets/range.cpp",
         "reversed slider bounds are put right only after the value is clamped",
-        [("    : options_(normalized(options)), value_(", "    : options_(options), value_(")],
+        [("    : options_(normalized(options)),", "    : options_(options),")],
     ),
     (
         "widgets/range.cpp",

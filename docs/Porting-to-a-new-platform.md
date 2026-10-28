@@ -18,13 +18,14 @@ A platform is two classes in `src/platform/platform.hpp`: `PlatformBackend` (the
 
 ## WindowEvents (the backend calls these)
 
-`on_mouse_move`, `on_mouse_button`, `on_mouse_wheel` and `on_mouse_leave` take device pixels; `on_key` takes a `KeyEvent`; `on_focus`, `on_resize(width, height, scale)` (also after the frame buffer is replaced), `on_frame(time)` and `on_close_request`.
+`on_mouse_move`, `on_mouse_button`, `on_mouse_wheel` and `on_mouse_leave` take device pixels; `on_key` takes a `KeyEvent`; `on_focus`, `on_capture_lost` (the system took the mouse capture away; harmless to report after your own release too), `on_resize(width, height, scale)` (also after the frame buffer is replaced), `on_frame(time)` and `on_close_request`.
 
 **Rules a backend must keep:**
 - `create_window` reports the initial size through `on_resize` before it returns.
 - A window is destroyed by the core, never by the backend; the close button only calls `on_close_request`.
 - After each batch of OS events, call `BackendHost::after_events()`, outside any window procedure: that is where closed windows are destroyed.
-- `wake()` is the only call that may come from another thread.
+- `wake()` is the only call that may come from another thread. Where the platform has modal loops of its own (Windows moving a window, a native message box), deliver the wake so that those loops run it too; on Windows it is a message to a message-only window.
+- Register a window with the backend only once it is completely built. If its constructor throws, the destructor does not run: release what was already created (on Windows, also detach the object from its window handle) before rethrowing.
 - Nothing may throw through the operating system's callbacks.
 
 ## PlatformBackend

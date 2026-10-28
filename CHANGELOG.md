@@ -13,3 +13,12 @@ The first version: the look, the motion, the basic controls, on Windows and Linu
 - **Widgets:** Label (with wrapping), Button (four variants), CheckBox, Switch, RadioButton (grouped by parent), Slider, ProgressBar (with an indeterminate mode), Separator, Card; layout with Column, Row, Grid and Spacer.
 - **Themes:** Dark, Black (for OLED screens) and Light, defined in code.
 - **Examples:** `hello` and `gallery`.
+
+Before the release, an independent review found 25 defects (one blocker: on Windows, the GPU path could stop repainting). All are fixed, most with a regression test; [How it is checked](docs/How-it-is-checked.md) lists them. The fixes that show in the API:
+
+- `MouseEvent::Kind::cancel`: a press that ends without a release, because the widget was hidden, disabled or removed, or the system took the mouse away.
+- `WindowEvents::on_capture_lost` (for porting): the backend reports a lost mouse capture.
+- `WindowOptions::min_size` is never larger than the requested `size`.
+- `Grid` with no columns gets one stretching column; a child spanning several columns widens them to fit.
+- `Callback` takes any callable, including one whose result the signature discards, and a callback may replace itself while it runs.
+- `App::run()` cannot be called while it is already running.
