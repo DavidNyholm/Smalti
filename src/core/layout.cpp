@@ -11,6 +11,10 @@ namespace smalti {
 namespace {
 
 constexpr float kUnbounded = 1e9f;
+// Rounds for spanning grid children that share columns to settle, and the shortfall below which
+// a span counts as fitting.
+constexpr int kSpanRounds = 4;
+constexpr float kSpanSlack = 0.01f;
 
 // The shared logic of Column and Row, written once along a "main" axis.
 struct Axis {
@@ -132,7 +136,7 @@ std::vector<Grid::Cell> Grid::place() const {
 std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float width) const {
   const size_t n = std::max<size_t>(1, options_.columns.size());
   std::vector<float> widths(n, 0.0f);
-  float fixed_total = 0, weight_total = 0;
+  float weight_total = 0;
   for (size_t c = 0; c < options_.columns.size(); ++c) {
     const GridTrack& t = options_.columns[c];
     if (t.kind == GridTrack::Kind::fixed) widths[c] = t.value;
@@ -152,42 +156,65 @@ std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float wid
       widths[c] = std::max(widths[c], s.width);
     }
   }
-  // A spanning child wider than the columns it covers widens the content-sized ones among them,
-  // evenly. Fixed columns keep their width; shared stretch columns get theirs below.
+  // Spanning children: what each one needs, measured once.
+  struct Span {
+    size_t first, last;
+    float need;
+  };
+  std::vector<Span> spans;
   for (const Cell& cell : cells) {
     if (cell.span == 1) continue;
-    const size_t first = static_cast<size_t>(cell.column),
-                 last = first + static_cast<size_t>(cell.span);
-    float have = options_.column_spacing * static_cast<float>(cell.span - 1);
-    int growable = 0;
-    for (size_t c = first; c < last; ++c) {
-      have += widths[c];
-      if (content_sized(c)) ++growable;
-    }
-    const float need =
-        max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size()).width;
-    // A span over a column that stretches is left to it: the shared-out width lands there, and
-    // charging the fit columns instead would squeeze the stretch column to nothing.
-    bool stretches = false;
-    for (size_t c = first; c < last; ++c)
-      stretches |= share && options_.columns[c].kind == GridTrack::Kind::stretch;
-    if (stretches || need <= have || growable == 0) continue;
-    const float extra = (need - have) / static_cast<float>(growable);
-    for (size_t c = first; c < last; ++c) {
-      if (content_sized(c)) widths[c] += extra;
-    }
+    const size_t first = static_cast<size_t>(cell.column);
+    spans.push_back(
+        {first, first + static_cast<size_t>(cell.span),
+         max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size()).width});
   }
-  for (size_t c = 0; c < options_.columns.size(); ++c) {
-    if (options_.columns[c].kind != GridTrack::Kind::stretch || share) fixed_total += widths[c];
-  }
-  if (share) {
+  // The widths once the stretch columns have their share of what the others leave.
+  const auto shared_out = [&] {
+    std::vector<float> out = widths;
+    if (!share) return out;
+    float fixed_total = 0;
+    for (size_t c = 0; c < options_.columns.size(); ++c) {
+      if (options_.columns[c].kind != GridTrack::Kind::stretch) fixed_total += out[c];
+    }
     const float spacing = options_.column_spacing * static_cast<float>(n - 1);
     const float left = std::max(0.0f, width - fixed_total - spacing);
     for (size_t c = 0; c < options_.columns.size(); ++c) {
-      if (options_.columns[c].kind == GridTrack::Kind::stretch) widths[c] = left * options_.columns[c].value / weight_total;
+      if (options_.columns[c].kind == GridTrack::Kind::stretch)
+        out[c] = left * options_.columns[c].value / weight_total;
     }
+    return out;
+  };
+  // A spanning child wider than its columns widens the content-sized ones among them, evenly.
+  // Where it also covers stretch columns, part of that growth comes back out of them when the
+  // width is shared out again, so the shortfall is divided by the part the span keeps. A span
+  // over every stretch column keeps nothing: it gets what sharing gives it. A few rounds settle
+  // spans that overlap.
+  std::vector<float> result = shared_out();
+  for (int round = 0; round < kSpanRounds; ++round) {
+    bool grew = false;
+    for (const Span& sp : spans) {
+      float have = options_.column_spacing * static_cast<float>(sp.last - sp.first - 1);
+      float span_weight = 0;
+      int growable = 0;
+      for (size_t c = sp.first; c < sp.last; ++c) {
+        have += result[c];
+        if (content_sized(c)) ++growable;
+        if (share && options_.columns[c].kind == GridTrack::Kind::stretch)
+          span_weight += options_.columns[c].value;
+      }
+      const float kept = share ? 1.0f - span_weight / weight_total : 1.0f;
+      if (sp.need <= have + kSpanSlack || growable == 0 || kept <= 0) continue;
+      const float extra = (sp.need - have) / kept / static_cast<float>(growable);
+      for (size_t c = sp.first; c < sp.last; ++c) {
+        if (content_sized(c)) widths[c] += extra;
+      }
+      grew = true;
+    }
+    if (!grew) break;
+    result = shared_out();
   }
-  return widths;
+  return result;
 }
 
 Size Grid::measure(Size available) {

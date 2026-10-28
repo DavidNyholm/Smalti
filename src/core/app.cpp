@@ -147,8 +147,16 @@ int App::run() {
   detail::Registry::instance().check_thread();
   detail::AppState& s = *state_;
   if (s.running) detail::contract_violation("App::run() was called while it is already running");
+  // A callback that fails while this cleanup runs it is reported like one that fails later.
+  const auto rethrow_pending = [&s] {
+    if (!s.pending_exception) return;
+    std::exception_ptr e = s.pending_exception;
+    s.pending_exception = nullptr;
+    std::rethrow_exception(e);
+  };
   s.flush_removals();
   s.reap_closed();
+  rethrow_pending();
   if (s.windows.empty()) return s.exit_code;
   s.running = true;
   try {
@@ -159,11 +167,7 @@ int App::run() {
   }
   s.running = false;
   s.reap_closed();
-  if (s.pending_exception) {
-    std::exception_ptr e = s.pending_exception;
-    s.pending_exception = nullptr;
-    std::rethrow_exception(e);
-  }
+  rethrow_pending();
   return s.exit_code;
 }
 

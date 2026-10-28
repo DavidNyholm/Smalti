@@ -218,6 +218,8 @@ class Win32Backend final : public PlatformBackend {
 
  private:
   void adopt_gpu_if_ready();
+  void rethrow_error();  // if a backend failure is pending
+  void dispatch_messages(UINT filter);
 
   BackendHost& host_;
   // Wakes arrive as a message to this message-only window, not as an event the loop waits on:
@@ -226,6 +228,9 @@ class Win32Backend final : public PlatformBackend {
   HWND wake_window_ = nullptr;
   std::atomic<bool> wake_posted_{false};
   std::atomic<bool> wake_lost_{false};  // PostMessage failed (a full queue): the loop runs the work
+  // Signalled with wake_lost_, and part of every wait: unlike a message it cannot fail to be
+  // delivered, so the loop cannot go to sleep between a failed post and the flag being set.
+  HANDLE lost_wake_event_ = nullptr;
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
@@ -589,9 +594,11 @@ Win32Backend::Win32Backend(Presentation presentation, BackendHost& host) : host_
     frame_timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);  // before Windows 10 1803
   wake_window_ = CreateWindowExW(0, kWakeClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                  wc.hInstance, nullptr);
-  if (!frame_timer_ || !wake_window_) {
+  lost_wake_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  if (!frame_timer_ || !wake_window_ || !lost_wake_event_) {
     if (frame_timer_) CloseHandle(frame_timer_);
     if (wake_window_) DestroyWindow(wake_window_);
+    if (lost_wake_event_) CloseHandle(lost_wake_event_);
     throw std::runtime_error("smalti: cannot create the event loop's handles");
   }
   SetWindowLongPtrW(wake_window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
@@ -610,6 +617,7 @@ Win32Backend::~Win32Backend() {
   if (gpu_thread_.joinable()) gpu_thread_.join();
   DestroyWindow(wake_window_);  // a wake still queued for it is dropped with it
   CloseHandle(frame_timer_);
+  CloseHandle(lost_wake_event_);
 }
 
 void Win32Backend::wake() {
@@ -620,6 +628,7 @@ void Win32Backend::wake() {
     // (and the modal-loop timer) checks this flag after the messages it is about to handle.
     wake_posted_ = false;
     wake_lost_ = true;
+    SetEvent(lost_wake_event_);
   }
 }
 
@@ -671,21 +680,41 @@ void Win32Backend::run_due_frames() {
   for (size_t i = 0; i < count && i < windows_.size(); ++i) windows_[i]->run_frame_if_due(now);
 }
 
+void Win32Backend::rethrow_error() {
+  if (!error_) return;
+  std::exception_ptr e = error_;
+  error_ = nullptr;
+  std::rethrow_exception(e);
+}
+
+void Win32Backend::dispatch_messages(UINT filter) {
+  MSG msg;
+  for (int n = 0; n < kMaxMessagesPerTurn && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | filter);
+       ++n) {
+    if (msg.message == WM_QUIT) quit_ = true;
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+}
+
 void Win32Backend::run() {
+  // A failure reported before the loop starts (a window whose construction failed in a message
+  // handler) comes out now: the loop would skip frames for it without ever ending.
+  rethrow_error();
   quit_ = false;
   std::vector<HANDLE> handles;
   std::vector<Win32Window*> owners;  // the window behind each handle, or nullptr
   while (!quit_) {
     // Wait for: a message (input, or a wake), the CPU-path frame timer, or a GPU window's swap
     // chain ready for its frame.
-    handles.clear();
-    owners.clear();
+    handles.assign(1, lost_wake_event_);
+    owners.assign(1, nullptr);
     const int64_t now = now_ns();
     int64_t due = INT64_MAX;
     for (Win32Window* w : windows_) {
       if (!w->waiting_for_gpu()) {
         due = std::min(due, w->next_frame_due());
-      } else if (handles.size() + 1 < kMaxWaitHandles) {  // one place stays free for the timer
+      } else if (handles.size() + 1 < kMaxWaitHandles) {  // one place stays for the timer
         handles.push_back(w->gpu_waitable());
         owners.push_back(w);
       } else {
@@ -714,12 +743,10 @@ void Win32Backend::run() {
     }
     if (r < WAIT_OBJECT_0 + handles.size() && owners[r - WAIT_OBJECT_0])
       owners[r - WAIT_OBJECT_0]->mark_gpu_ready();
-    MSG msg;
-    for (int n = 0; n < kMaxMessagesPerTurn && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++n) {
-      if (msg.message == WM_QUIT) quit_ = true;
-      TranslateMessage(&msg);
-      DispatchMessageW(&msg);
-    }
+    // Input first: the queue hands out posted messages (wakes among them) before mouse and
+    // keyboard input, so a job that keeps posting would otherwise keep input waiting.
+    dispatch_messages(PM_QS_INPUT);
+    dispatch_messages(0);
     run_lost_wake();
     run_due_frames();
     host_.after_events();

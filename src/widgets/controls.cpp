@@ -265,7 +265,10 @@ RadioButton& RadioButton::on_select(Callback<void()> fn) {
   return *this;
 }
 
-void RadioButton::select() { set_selected(true, true); }
+void RadioButton::select() {
+  const detail::DispatchScope scope(detail::app_state());  // its callback must not free this radio
+  set_selected(true, true);
+}
 
 void RadioButton::set_selected(bool selected, bool notify) {
   if (selected == selected_) return;

@@ -243,7 +243,8 @@ void WindowState::focus(Widget* w) {
   Widget* old = find(focused);
   focused = id;
   if (old) old->on_focus_changed(false);
-  if (w) w->on_focus_changed(true);
+  // The old widget's hook may have moved focus on, or hidden w: then w never had it.
+  if (w && focused == id) w->on_focus_changed(true);
 }
 
 void WindowState::cancel_press() {
@@ -335,15 +336,23 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
     }
     focus(focus_target);
     for (Widget* w = target; w; w = Tree::parent_of(*w)) {
-      if (eligible(*w) && w->on_mouse(e)) {
-        pressed = w->id();
-        pressed_button = button;
+      if (!eligible(*w)) continue;
+      // The press is this widget's while its handler runs, so hiding, disabling or removing it
+      // from there (or a release pumped by a nested loop) ends this press and no later one.
+      pressed = w->id();
+      pressed_button = button;
+      const bool taken = w->on_mouse(e);
+      const bool still_ours = pressed == w->id();
+      if (!taken) {
+        if (still_ours) pressed = {};
+        continue;
+      }
+      if (still_ours) {
         native->capture_mouse(true);
         w->invalidate();
-        // Its own press may have disabled or hidden it (a callback did): then the press is over.
         if (!eligible(*w)) cancel_press();
-        break;
       }
+      break;
     }
   });
 }

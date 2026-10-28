@@ -45,6 +45,10 @@ bool within_raster_limit(const Path& outline, const Transform& t) {
     x1 = std::max<double>(x1, d.x);
     y1 = std::max<double>(y1, d.y);
   }
+  // Far outside any window, coordinates no longer fit the rasterizer's integers, whatever the
+  // area (a degenerate glyph has none). Written so that NaN fails too.
+  const double reach = kUnbounded;
+  if (!(x0 >= -reach && x1 <= reach && y0 >= -reach && y1 <= reach)) return false;
   const double area = (x1 - x0 + 1) * (y1 - y0 + 1);
   return std::isfinite(area) && area <= kMaxGlyphPixels;
 }

@@ -138,16 +138,6 @@ MUTATIONS = [
         ],
     ),
     (
-        "core/layout.cpp",
-        "a spanning child squeezes a stretch column to nothing",
-        [
-            (
-                "    if (stretches || need <= have || growable == 0) continue;",
-                "    if (need <= have || growable == 0) continue;",
-            )
-        ],
-    ),
-    (
         "render/font.cpp",
         "kerning sums beyond 16 bits change once cached",
         [("  total = std::clamp(total, int{INT16_MIN}, int{INT16_MAX});", "")],
@@ -161,6 +151,51 @@ MUTATIONS = [
         "render/text.cpp",
         "a giant glyph is rasterized whatever it costs",
         [("      within_raster_limit(outline_, t)\n", "      true\n")],
+    ),
+    (
+        "core/layout.cpp",
+        "a span over stretch columns ignores what sharing takes back",
+        [
+            (
+                "      const float kept = share ? 1.0f - span_weight / weight_total : 1.0f;",
+                "      const float kept = 1.0f;",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "a press its own handler cancelled is captured anyway",
+        [
+            (
+                "      if (still_ours) {\n        native->capture_mouse(true);",
+                "      if (true) {\n        pressed = w->id();\n        native->capture_mouse(true);",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "focus gain is reported after focus already moved on",
+        [("  if (w && focused == id) w->on_focus_changed(true);", "  if (w) w->on_focus_changed(true);")],
+    ),
+    (
+        "core/app.cpp",
+        "a failure during run()'s startup cleanup is swallowed",
+        [
+            (
+                "  s.reap_closed();\n  rethrow_pending();\n  if (s.windows.empty()) return s.exit_code;",
+                "  s.reap_closed();\n  if (s.windows.empty()) return s.exit_code;",
+            )
+        ],
+    ),
+    (
+        "widgets/controls.cpp",
+        "select() from code lets its callback free the radio",
+        [
+            (
+                "  const detail::DispatchScope scope(detail::app_state());  // its callback must not free this radio\n",
+                "",
+            )
+        ],
     ),
     # Layout
     (
