@@ -14,7 +14,7 @@ The first version: the look, the motion, the basic controls, on Windows and Linu
 - **Themes:** Dark, Black (for OLED screens) and Light, defined in code.
 - **Examples:** `hello`, `gallery`, and `settings` (the sample in the docs).
 
-Before the release, three rounds of independent review found 25, 21 and then 9 defects (one blocker: on Windows, the GPU path could stop repainting). All are fixed, most with a regression test; [How it is checked](docs/How-it-is-checked.md) lists them. The fixes that show in the API:
+Before the release, three rounds of review by GPT-6-Astra found 25, 21 and then 9 defects (one blocker: on Windows, the GPU path could stop repainting). All are fixed, most with a regression test; [How it is checked](docs/How-it-is-checked.md) lists them. The fixes that show in the API:
 
 - `MouseEvent::Kind::cancel`: a press that ends without a release, because the widget was hidden, disabled or removed, or the system took the mouse away.
 - `WindowEvents::on_capture_lost` (for porting): the backend reports a lost mouse capture.

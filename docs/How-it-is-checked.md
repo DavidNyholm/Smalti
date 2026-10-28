@@ -60,7 +60,7 @@ The second form runs only the bugs whose description contains the given text. A 
 
 ## Review
 
-Before its release, v0.1 had three rounds of independent code review: read-only passes over the whole source by a reviewer asked to act as a hostile senior engineer, with each finding stated as a concrete failure scenario. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+Before its release, v0.1 had three rounds of code review by a second model, **GPT-6-Astra** (model id `gpt-6-astra`, at its highest reasoning effort) through the Codex CLI: read-only passes over the whole source, asked to act as a hostile senior engineer and to state each finding as a concrete failure scenario. Claude checked every finding against the code before fixing it; all of them turned out to be real. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
 
 ### Round 1
 
