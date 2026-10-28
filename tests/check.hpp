@@ -44,7 +44,8 @@ template <class T>
 concept Streamable = requires(std::ostream& os, const T& v) { os << v; };
 
 template <class A, class B>
-void require_eq(const A& a, const B& b, const char* ea, const char* eb, const char* file, int line) {
+void require_eq(const A& a, const B& b, const char* ea, const char* eb, const char* file,
+                int line) {
   if (a == b) return;
   std::ostringstream msg;
   msg << ea << " == " << eb;
@@ -52,7 +53,8 @@ void require_eq(const A& a, const B& b, const char* ea, const char* eb, const ch
   fail(msg.str(), file, line);
 }
 
-inline void require_near(double a, double b, double tol, const char* ea, const char* eb, const char* file, int line) {
+inline void require_near(double a, double b, double tol, const char* ea, const char* eb,
+                         const char* file, int line) {
   if (std::fabs(a - b) <= tol) return;
   std::ostringstream msg;
   msg << ea << " ~= " << eb << "  (got " << a << " vs " << b << ", tolerance " << tol << ")";
@@ -64,7 +66,8 @@ inline int run(int argc, char** argv) {
   int passed = 0, failed = 0;
   const auto start = std::chrono::steady_clock::now();
   for (const auto& test : registry()) {
-    if (!filter.empty() && std::string_view(test.name).find(filter) == std::string_view::npos) continue;
+    if (!filter.empty() && std::string_view(test.name).find(filter) == std::string_view::npos)
+      continue;
     const int before = current_failures();
     try {
       test.fn();
@@ -77,7 +80,8 @@ inline int run(int argc, char** argv) {
     std::printf("%s %s\n", ok ? "  ok  " : "  FAIL", test.name);
     (ok ? passed : failed)++;
   }
-  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - start);
   std::printf("\n%d passed, %d failed, %d total, %lld ms\n", passed, failed, passed + failed,
               static_cast<long long>(ms.count()));
   return failed == 0 ? 0 : 1;

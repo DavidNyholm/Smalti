@@ -1,7 +1,7 @@
 // The smallest smalti program: a window, a heading, a label and a button that counts.
-#include <smalti/smalti.hpp>
-
 #include <string>
+
+#include <smalti/smalti.hpp>
 
 namespace sm = smalti;
 
@@ -10,7 +10,8 @@ int main() {
   auto win = app.open_window({"Hello, smalti", {380, 220}});
   auto col = win->add<sm::Column>(sm::StackOptions{.spacing = 12, .padding = sm::Insets::all(28)});
   col->add<sm::Label>("Hello, smalti", sm::LabelOptions{.role = sm::TextRole::heading});
-  auto status = col->add<sm::Label>("Nothing clicked yet.", sm::LabelOptions{.role = sm::TextRole::secondary});
+  auto status = col->add<sm::Label>("Nothing clicked yet.",
+                                    sm::LabelOptions{.role = sm::TextRole::secondary});
   col->add<sm::Spacer>();
   auto button = col->add<sm::Button>("Click me", sm::ButtonVariant::primary);
   button->set_align(sm::Align::start);

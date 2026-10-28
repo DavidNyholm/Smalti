@@ -75,13 +75,13 @@ TEST(layout_grid_fit_and_stretch_columns_with_span) {
   wide->set_column_span(2);
   wide->set_align(Align::stretch);
   testing::Driver(win).frame();
-  CHECK_EQ(label1->bounds().width, 90.0f);  // the fit column is as wide as its widest cell
-  CHECK_EQ(field1->bounds().x, 100.0f);     // 90 + 10 spacing
-  CHECK_EQ(field1->bounds().width, 300.0f); // the rest of the 400
-  CHECK_EQ(field2->bounds().y, 35.0f);      // row 1 starts after row 0 (30 tall) and spacing
-  CHECK_EQ(label2->bounds().y, 40.0f);      // and a 20-pixel label is centred in it
+  CHECK_EQ(label1->bounds().width, 90.0f);   // the fit column is as wide as its widest cell
+  CHECK_EQ(field1->bounds().x, 100.0f);      // 90 + 10 spacing
+  CHECK_EQ(field1->bounds().width, 300.0f);  // the rest of the 400
+  CHECK_EQ(field2->bounds().y, 35.0f);       // row 1 starts after row 0 (30 tall) and spacing
+  CHECK_EQ(label2->bounds().y, 40.0f);       // and a 20-pixel label is centred in it
   CHECK(wide->bounds() == (Rect{0, 70, 400, 10}));
-  CHECK_EQ(label1->bounds().y, 5.0f);       // centred in its 30-pixel row
+  CHECK_EQ(label1->bounds().y, 5.0f);  // centred in its 30-pixel row
 }
 
 TEST(layout_card_pads_its_children) {

@@ -69,7 +69,7 @@ class Widget {
   // Layout parameters, read by the parent's layout.
   void set_stretch(float factor);  // share of leftover space along the parent's direction
   float stretch() const { return stretch_; }
-  void set_align(Align align);     // placement across the parent's direction
+  void set_align(Align align);  // placement across the parent's direction
   // The child's own alignment, or `fallback` (the container's default) if none was set.
   Align align_or(Align fallback) const { return align_set_ ? align_ : fallback; }
   void set_min_size(Size size);
@@ -118,12 +118,12 @@ class Widget {
 
   // Starts animating `m` from its current value to `target`. Under reduced motion, or with a
   // zero duration, it jumps.
-  void animate(Motion& m, float target, std::chrono::milliseconds duration, Easing easing = Easing::ease_out);
+  void animate(Motion& m, float target, std::chrono::milliseconds duration,
+               Easing easing = Easing::ease_out);
   float at(const Motion& m) const;  // the motion's value at the current frame
   // Asks for one more frame after this one, for animations with no end (indeterminate progress).
   void keep_animating();
   int64_t frame_time_ns() const;
-
 
  private:
   friend class Window;

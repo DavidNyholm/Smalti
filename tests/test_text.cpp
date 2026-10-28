@@ -59,7 +59,8 @@ TEST(text_glyph_cache_respects_its_budget) {
   GlyphCache cache(64 * 1024);
   for (int size = 10; size < 60; ++size) {
     for (char c = 'A'; c <= 'Z'; ++c) {
-      cache.get(*fonts.regular, fonts.regular->glyph_index(static_cast<char32_t>(c)), static_cast<float>(size), 0, 1.0f);
+      cache.get(*fonts.regular, fonts.regular->glyph_index(static_cast<char32_t>(c)),
+                static_cast<float>(size), 0, 1.0f);
     }
   }
   CHECK(cache.bytes() <= 64 * 1024);

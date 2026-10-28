@@ -114,7 +114,8 @@ TEST(motion_settles_and_then_requests_no_frames) {
   // settled nothing more is drawn: an idle app costs nothing.
   App app(headless());
   auto win = app.open_window({"t", {300, 200}});
-  auto button = win->add<Column>(StackOptions{0, Insets::all(20), Align::start, Align::start})->add<Button>("Hover");
+  auto button = win->add<Column>(StackOptions{0, Insets::all(20), Align::start, Align::start})
+                    ->add<Button>("Hover");
   testing::Driver d(win);
   d.advance(1s);
   CHECK(!d.frame_requested());
@@ -133,7 +134,8 @@ TEST(motion_settles_and_then_requests_no_frames) {
 TEST(indeterminate_progress_keeps_animating_until_hidden) {
   App app(headless());
   auto win = app.open_window({"t", {300, 100}});
-  auto bar = win->add<Column>(StackOptions{0, Insets::all(20), Align::stretch, Align::start})->add<ProgressBar>();
+  auto bar = win->add<Column>(StackOptions{0, Insets::all(20), Align::stretch, Align::start})
+                 ->add<ProgressBar>();
   bar->set_indeterminate(true);
   testing::Driver d(win);
   const int before = d.frames_drawn();

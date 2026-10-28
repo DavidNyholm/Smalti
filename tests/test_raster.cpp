@@ -17,7 +17,9 @@ constexpr float kPi = 3.14159265358979f;
 const RectI kBig{-1000, -1000, 4000, 4000};
 
 double area(const MaskView& m) {
-  return std::accumulate(m.coverage, m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h), 0.0) / 255.0;
+  return std::accumulate(m.coverage,
+                         m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h), 0.0) /
+         255.0;
 }
 
 Path rect(float x, float y, float w, float h) {
@@ -32,7 +34,7 @@ TEST(raster_fractional_rect_has_exact_area_and_partial_edges) {
   Rasterizer r;
   const MaskView m = r.fill(rect(0.25f, 0.5f, 3.5f, 2.0f), {}, kBig);
   CHECK_NEAR(area(m), 7.0, 0.02);
-  CHECK_NEAR(m.coverage[0] / 255.0, 0.75 * 0.5, 0.01);                       // top-left corner pixel
+  CHECK_NEAR(m.coverage[0] / 255.0, 0.75 * 0.5, 0.01);  // top-left corner pixel
   CHECK_NEAR(m.coverage[static_cast<size_t>(m.w) + 1] / 255.0, 1.0, 0.004);  // interior
 }
 
@@ -119,9 +121,14 @@ TEST(canvas_dithered_gradient_averages_to_the_ramp) {
   c.set_target(bmp.view());
   c.clear(Color::hex(0x000000));
   c.rounded_gradient({0, 0, 256, 64}, 0, Color::hex(0x101010), Color::hex(0x141414), true);
-  const int row = 32;
-  double sum = 0;
-  for (int x = 0; x < 256; ++x) sum += bmp.pixels[static_cast<size_t>(row) * 256 + static_cast<size_t>(x)] & 0xFF;
-  const double expected = 0x10 + (0x14 - 0x10) * ((row + 0.5) / 64.0);
-  CHECK_NEAR(sum / 256.0, expected, 0.2);
+  // Every row: without dithering, rows whose true value sits near a half step miss by about 0.5.
+  double worst = 0;
+  for (int row = 0; row < 64; ++row) {
+    double sum = 0;
+    for (int x = 0; x < 256; ++x)
+      sum += bmp.pixels[static_cast<size_t>(row) * 256 + static_cast<size_t>(x)] & 0xFF;
+    const double expected = 0x10 + (0x14 - 0x10) * ((row + 0.5) / 64.0);
+    worst = std::max(worst, std::fabs(sum / 256.0 - expected));
+  }
+  CHECK(worst < 0.2);
 }

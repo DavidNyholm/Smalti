@@ -18,8 +18,9 @@ void build_controls(Ref<Column> col) {
   col->add<ProgressBar>(0.6f);
   col->add<Separator>();
   auto card = col->add<Card>();
-  card->add<Label>("A card with a shadow and a wrapped label that needs more than one line to fit its width.",
-                   LabelOptions{TextRole::secondary, true});
+  card->add<Label>(
+      "A card with a shadow and a wrapped label that needs more than one line to fit its width.",
+      LabelOptions{TextRole::secondary, true});
 }
 
 }  // namespace

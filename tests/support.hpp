@@ -16,7 +16,9 @@ struct ContractError : std::runtime_error {
 // While alive, contract violations throw ContractError, so a test can check that one happens.
 class ExpectContracts {
  public:
-  ExpectContracts() { smalti::set_contract_handler([](const char* m) { throw ContractError(m); }); }
+  ExpectContracts() {
+    smalti::set_contract_handler([](const char* m) { throw ContractError(m); });
+  }
   ~ExpectContracts() { smalti::set_contract_handler(nullptr); }
   ExpectContracts(const ExpectContracts&) = delete;
   ExpectContracts& operator=(const ExpectContracts&) = delete;

@@ -84,7 +84,8 @@ struct CheckBoxOptions {
 class CheckBox : public Widget {
  public:
   explicit CheckBox(CheckBoxOptions options);
-  explicit CheckBox(std::string text, bool checked = false) : CheckBox(CheckBoxOptions{std::move(text), checked}) {}
+  explicit CheckBox(std::string text, bool checked = false)
+      : CheckBox(CheckBoxOptions{std::move(text), checked}) {}
 
   CheckBox& on_change(Callback<void(bool)> fn);
   void set_checked(bool checked);
@@ -216,7 +217,8 @@ enum class Orientation : uint8_t { horizontal, vertical };
 
 class Separator : public Widget {
  public:
-  explicit Separator(Orientation orientation = Orientation::horizontal) : orientation_(orientation) {}
+  explicit Separator(Orientation orientation = Orientation::horizontal)
+      : orientation_(orientation) {}
   Size measure(Size available) override;
   void paint(Painter& p) override;
 

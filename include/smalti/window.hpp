@@ -14,11 +14,11 @@ class App;
 namespace detail {
 struct WindowState;
 class Tree;
-}
+}  // namespace detail
 
 struct WindowOptions {
   std::string title = "smalti";
-  Size size{960, 640};      // client area, logical pixels
+  Size size{960, 640};  // client area, logical pixels
   Size min_size{320, 240};
 };
 

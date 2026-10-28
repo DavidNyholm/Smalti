@@ -30,7 +30,7 @@ class Driver {
   // Processes pending removals and closes without drawing.
   void idle();
 
-  int width() const;   // device pixels
+  int width() const;  // device pixels
   int height() const;
   uint32_t pixel(int x, int y) const;  // 0xAARRGGBB
   bool frame_requested() const;        // would a real window draw again without new input?

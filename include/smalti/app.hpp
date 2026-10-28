@@ -15,7 +15,7 @@ enum class Backend : uint8_t {
   automatic,  // Win32 on Windows; X11 on Linux when a display is available, else headless
   win32,
   x11,
-  headless,   // no screen: windows draw into memory; for tests and image rendering
+  headless,  // no screen: windows draw into memory; for tests and image rendering
 };
 
 enum class Presentation : uint8_t {
@@ -33,7 +33,7 @@ struct MemoryStats {
   size_t widgets = 0;
   size_t frame_buffer_bytes = 0;  // pixels the CPU draws into, all windows
   size_t glyph_cache_bytes = 0;
-  size_t gpu_texture_bytes = 0;   // our own textures and swap chains, not the driver's overhead
+  size_t gpu_texture_bytes = 0;  // our own textures and swap chains, not the driver's overhead
 };
 
 namespace detail {
