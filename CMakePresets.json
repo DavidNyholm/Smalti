@@ -1,0 +1,75 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "windows",
+      "displayName": "Visual Studio 2022, x64",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-asan",
+      "displayName": "Visual Studio 2022, x64, AddressSanitizer",
+      "inherits": "windows",
+      "binaryDir": "${sourceDir}/build/windows-asan",
+      "cacheVariables": { "SMALTI_SANITIZE": "ON" }
+    },
+    {
+      "name": "windows-insiders",
+      "displayName": "Visual Studio 2026 (needs CMake 4.2), x64",
+      "inherits": "windows",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "${sourceDir}/build/windows-insiders"
+    },
+    {
+      "name": "linux",
+      "displayName": "GCC 13+ or Clang 16+, Ninja, Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux",
+      "displayName": "GCC 13+ or Clang 16+, Ninja, Release",
+      "binaryDir": "${sourceDir}/build/linux-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-asan",
+      "inherits": "linux",
+      "displayName": "GCC 13+ or Clang 16+, Ninja, Debug, AddressSanitizer and UBSan",
+      "binaryDir": "${sourceDir}/build/linux-asan",
+      "cacheVariables": { "SMALTI_SANITIZE": "ON" }
+    },
+    {
+      "name": "headless",
+      "displayName": "Any compiler, no window system (tests and image rendering only)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/headless",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "SMALTI_HEADLESS_ONLY": "ON", "SMALTI_BUILD_EXAMPLES": "OFF" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows", "configurePreset": "windows", "configuration": "Debug" },
+    { "name": "windows-release", "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-asan", "configurePreset": "windows-asan", "configuration": "Debug" },
+    { "name": "windows-insiders", "configurePreset": "windows-insiders", "configuration": "Debug" },
+    { "name": "linux", "configurePreset": "linux" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-asan", "configurePreset": "linux-asan" },
+    { "name": "headless", "configurePreset": "headless" }
+  ],
+  "testPresets": [
+    { "name": "windows", "configurePreset": "windows", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "windows-release", "configurePreset": "windows", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "windows-asan", "configurePreset": "windows-asan", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "linux", "configurePreset": "linux", "output": { "outputOnFailure": true } },
+    { "name": "linux-release", "configurePreset": "linux-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-asan", "configurePreset": "linux-asan", "output": { "outputOnFailure": true } },
+    { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true } }
+  ]
+}

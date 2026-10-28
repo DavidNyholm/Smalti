@@ -1,0 +1,162 @@
+// The internal state behind App and Window: the widget registry, the per-window pipeline
+// (input, layout, damage, paint, present) and the app-wide resources shared by all windows.
+#pragma once
+
+#include <exception>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include "platform/platform.hpp"
+#include "render/canvas.hpp"
+#include "render/text.hpp"
+#include "smalti/app.hpp"
+#include "smalti/window.hpp"
+
+namespace smalti::detail {
+
+// Maps WidgetIds to live widgets. Generations make an old id useless once its slot is reused.
+class Registry {
+ public:
+  static Registry& instance();
+  WidgetId allocate(Widget* widget);
+  void release(WidgetId id);
+  Widget* find(WidgetId id) const;  // nullptr if removed
+  void check_thread() const;        // a contract violation off the UI thread
+  void set_ui_thread(std::optional<std::thread::id> id) { ui_thread_ = id; }
+  size_t live() const { return live_; }
+
+ private:
+  struct Slot {
+    Widget* widget = nullptr;
+    uint32_t generation = 0;
+  };
+  std::vector<Slot> slots_{Slot{}};  // slot 0 is never used, so a default WidgetId is never live
+  std::vector<uint32_t> free_;
+  std::optional<std::thread::id> ui_thread_;
+  size_t live_ = 0;
+};
+
+// What a Painter draws with.
+struct PaintState {
+  Canvas* canvas = nullptr;
+  GlyphCache* glyphs = nullptr;
+  const FontSet* fonts = nullptr;
+  const Theme* theme = nullptr;
+  float scale = 1;
+  std::vector<RectI> clips;
+  std::vector<Point> scratch;  // reused for polylines
+};
+
+struct WindowState final : platform::WindowEvents {
+  WindowState(App& app, Window& window, const WindowOptions& options);
+  ~WindowState();
+
+  // From widgets.
+  void invalidate(const Rect& logical);
+  void invalidate_all();
+  void invalidate_layout();
+  void animate_until(WidgetId id, int64_t end_ns);
+  int64_t now() const;
+  void focus(Widget* w);
+  void request_frame();
+
+  // platform::WindowEvents
+  void on_mouse_move(Point device, Modifiers mods) override;
+  void on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods, int clicks) override;
+  void on_mouse_wheel(Point device, Point delta, Modifiers mods) override;
+  void on_mouse_leave() override;
+  void on_key(const KeyEvent& e) override;
+  void on_focus(bool gained) override;
+  void on_resize(int width_px, int height_px, float scale) override;
+  void on_frame(int64_t frame_time_ns) override;
+  void on_close_request() override;
+
+  // The pipeline, also used by the test driver.
+  void draw(int64_t frame_time_ns);
+  Widget* hit_test(Point logical) const;
+  void set_hovered(Widget* w);
+  void move_focus(bool backwards);
+
+  App& app;
+  Window& window;
+  std::unique_ptr<platform::NativeWindow> native;
+  std::string title;
+  Size min_size;
+  float scale = 1;
+  int width_px = 0, height_px = 0;
+  PixelBuffer frame;
+  Canvas canvas;
+  PaintState paint;
+
+  std::vector<RectI> dirty;
+  bool layout_dirty = true;
+  int64_t frame_time = 0;
+  int frames_drawn = 0;
+
+  WidgetId hovered, pressed, focused;
+  bool keyboard_mode = false;  // focus rings show only while navigating by keyboard
+  bool window_focused = true;
+  Point last_mouse{-1, -1};
+  std::vector<std::pair<WidgetId, int64_t>> animating;  // widget, until when
+};
+
+struct AppState final : platform::BackendHost {
+  explicit AppState(App& app, const AppOptions& options);
+  ~AppState();
+
+  void on_wake() override;
+  void after_events() override;
+  // Runs fn, catching anything it throws: the first exception stops the loop and is rethrown
+  // from run(). Pending removals are processed afterwards.
+  template <class F>
+  void guarded(F&& fn) {
+    try {
+      fn();
+    } catch (...) {
+      if (!pending_exception) pending_exception = std::current_exception();
+      if (backend) backend->quit();
+    }
+    flush_removals();
+  }
+  void schedule_removal(WidgetId id);
+  void flush_removals();
+  void window_closed(Window* w);
+  void reap_closed();  // destroys windows closed since the last call
+
+  App& app;
+  std::unique_ptr<platform::PlatformBackend> backend;
+  platform::SystemInfo system;
+  Theme theme;
+  FontSet fonts;
+  GlyphCache glyphs;
+  std::vector<std::unique_ptr<Window>> windows;
+  std::vector<std::unique_ptr<Window>> closing;  // closed, destroyed at the next safe point
+  std::vector<WidgetId> removals;
+  std::exception_ptr pending_exception;
+  int exit_code = 0;
+  bool running = false;
+
+  std::mutex posted_mutex;
+  std::vector<Callback<void()>> posted;
+};
+
+// The core's access to the parts of Widget and Window that are not public API.
+class Tree {
+ public:
+  static Window* window_of(const Widget& w) { return w.window_; }
+  static Widget* parent_of(const Widget& w) { return w.parent_; }
+  static WindowState* state_of(const Window& w) { return w.state_.get(); }
+  static void set_window(Widget& w, Window* window) { w.window_ = window; }
+  static void set_bounds(Widget& w, Rect r) { w.bounds_ = r; }
+  // Takes `w` out of its parent and hands over ownership; nullptr for a window.
+  static std::unique_ptr<Widget> detach(Widget& w);
+};
+
+WindowState* window_state_of(const Widget& w);
+AppState& app_state();
+
+}  // namespace smalti::detail

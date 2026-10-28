@@ -1,0 +1,123 @@
+cmake_minimum_required(VERSION 3.21)
+
+project(smalti
+  VERSION 0.1.0
+  DESCRIPTION "A C++20 GUI library for desktop applications"
+  LANGUAGES CXX)
+
+include(GNUInstallDirs)
+include(cmake/embed_fonts.cmake)
+
+option(SMALTI_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
+option(SMALTI_BUILD_TESTS "Build the tests and register them with CTest" ${PROJECT_IS_TOP_LEVEL})
+option(SMALTI_HEADLESS_ONLY "Build without the Win32 or X11 backend (windows draw into memory)" OFF)
+option(SMALTI_SANITIZE "Build our targets with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(SMALTI_INSTALL "Generate install rules and a smaltiConfig.cmake" ${PROJECT_IS_TOP_LEVEL})
+
+smalti_embed_fonts("${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp")
+
+add_library(smalti STATIC
+  src/core/app.cpp
+  src/core/layout.cpp
+  src/core/painter.cpp
+  src/core/registry.cpp
+  src/core/testing.cpp
+  src/core/theme.cpp
+  src/core/widget.cpp
+  src/core/window.cpp
+  src/platform/backend.cpp
+  src/platform/headless.cpp
+  src/render/canvas.cpp
+  src/render/embedded_fonts.cpp
+  src/render/font.cpp
+  src/render/geometry.cpp
+  src/render/raster.cpp
+  src/render/text.cpp
+  src/widgets/controls.cpp
+  src/widgets/label.cpp
+  src/widgets/range.cpp
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp")
+add_library(smalti::smalti ALIAS smalti)
+target_compile_features(smalti PUBLIC cxx_std_20)
+target_include_directories(smalti
+  PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+find_package(Threads REQUIRED)
+target_link_libraries(smalti PUBLIC Threads::Threads)
+
+if(SMALTI_HEADLESS_ONLY)
+  target_compile_definitions(smalti PRIVATE SMALTI_HEADLESS_ONLY)
+elseif(WIN32)
+  target_sources(smalti PRIVATE src/platform/win32.cpp src/platform/win32_gpu.cpp)
+  target_compile_definitions(smalti PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+  # Only system DLLs on Windows' protected KnownDLLs list are linked directly. Direct3D, DXGI
+  # and DWM are loaded at run time from the system directory (see SECURITY.md).
+  target_link_libraries(smalti PRIVATE user32 gdi32 advapi32)
+elseif(UNIX AND NOT APPLE)
+  find_package(X11 REQUIRED)
+  target_sources(smalti PRIVATE src/platform/x11.cpp)
+  target_link_libraries(smalti PRIVATE X11::X11 ${CMAKE_DL_LIBS})
+endif()
+
+# Strict warnings and the sanitizers apply to our own targets only, never to consumers.
+function(smalti_strict target)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus)
+    if(SMALTI_SANITIZE)
+      target_compile_options(${target} PRIVATE /fsanitize=address)
+    endif()
+  else()
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    if(SMALTI_SANITIZE)
+      target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+endfunction()
+smalti_strict(smalti)
+# The generated font arrays are data, not code worth warning about.
+set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp" PROPERTIES SKIP_LINTING ON)
+
+if(SMALTI_BUILD_EXAMPLES)
+  foreach(example hello gallery)
+    add_executable(${example} WIN32 examples/${example}.cpp)
+    target_link_libraries(${example} PRIVATE smalti::smalti)
+    smalti_strict(${example})
+    if(MSVC)
+      # WIN32 programs start at WinMain; this lets them keep a portable main().
+      target_link_options(${example} PRIVATE /ENTRY:mainCRTStartup)
+    endif()
+  endforeach()
+endif()
+
+if(SMALTI_BUILD_TESTS)
+  enable_testing()
+  add_executable(smalti_tests
+    tests/main.cpp
+    tests/test_font.cpp
+    tests/test_layout.cpp
+    tests/test_memory.cpp
+    tests/test_raster.cpp
+    tests/test_ref.cpp
+    tests/test_text.cpp
+    tests/test_widgets.cpp)
+  target_link_libraries(smalti_tests PRIVATE smalti::smalti)
+  target_include_directories(smalti_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+  smalti_strict(smalti_tests)
+  add_test(NAME smalti_tests COMMAND smalti_tests)
+  set_tests_properties(smalti_tests PROPERTIES TIMEOUT 300)
+endif()
+
+if(SMALTI_INSTALL)
+  include(CMakePackageConfigHelpers)
+  install(DIRECTORY include/smalti DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(TARGETS smalti EXPORT smaltiTargets)
+  install(EXPORT smaltiTargets NAMESPACE smalti:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/smalti)
+  write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/smaltiConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION} COMPATIBILITY SameMinorVersion)
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfig.cmake"
+    "include(CMakeFindDependencyMacro)\nfind_dependency(Threads)\nif(UNIX AND NOT APPLE)\n  find_dependency(X11)\nendif()\ninclude(\"\${CMAKE_CURRENT_LIST_DIR}/smaltiTargets.cmake\")\n")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/smaltiConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/smalti)
+  install(FILES LICENSE fonts/OFL.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/smalti)
+endif()
