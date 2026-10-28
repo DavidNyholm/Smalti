@@ -6,7 +6,7 @@ smalti's default font is Inter (regular, medium and semibold), compiled into the
 
 ## The TrueType reader
 
-smalti reads TrueType (`glyf`) fonts itself: the `cmap` formats 4 and 12, `glyf` and `loca` including composite glyphs, `hmtx`, `hhea`, `OS/2`, and pair kerning from `GPOS` (Inter has no legacy `kern` table). Every read goes through one bounds-checked reader, because a font file is input: a truncated or damaged font is refused, or loads with its damaged glyphs drawn as nothing. The tests run hundreds of truncated and corrupted copies of Inter through it under AddressSanitizer. CFF-flavoured `.otf` fonts are not read in v0.x.
+smalti reads TrueType (`glyf`) fonts itself: the `cmap` formats 4 and 12, `glyf` and `loca` including composite glyphs, `hmtx`, `hhea`, `OS/2`, and pair kerning from `GPOS` (Inter has no legacy `kern` table). Every lookup of the `kern` features adds its adjustment, as the OpenType rules say. The `kern` features of all scripts are taken together, rather than the one for the text's script: the same for Inter, whose scripts share their kerning lookups, but a font whose scripts kern the same pair in different lookups would have that pair kerned twice. Every read goes through one bounds-checked reader, because a font file is input: a truncated or damaged font is refused, or loads with its damaged glyphs drawn as nothing. The tests run hundreds of truncated and corrupted copies of Inter through it under AddressSanitizer. CFF-flavoured `.otf` fonts are not read in v0.x.
 
 ## How text is drawn
 
