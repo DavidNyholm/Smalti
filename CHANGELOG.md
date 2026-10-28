@@ -2,7 +2,7 @@
 
 Semantic versioning; during 0.x, any version may change the API, and every change that does is listed here.
 
-## Unreleased: 0.1.0 "First light"
+## 0.1.0 "First light" (2026-10-29)
 
 The first version: the look, the motion, the basic controls, on Windows and Linux.
 
@@ -12,9 +12,9 @@ The first version: the look, the motion, the basic controls, on Windows and Linu
 - **Core:** `Ref<T>` handles with generation checks, deferred removal, single-thread enforcement, exceptions from callbacks rethrown from `run()`, damage tracking, motion driven by the frame clock, keyboard focus with Tab order.
 - **Widgets:** Label (with wrapping), Button (four variants), CheckBox, Switch, RadioButton (grouped by parent), Slider, ProgressBar (with an indeterminate mode), Separator, Card; layout with Column, Row, Grid and Spacer.
 - **Themes:** Dark, Black (for OLED screens) and Light, defined in code.
-- **Examples:** `hello` and `gallery`.
+- **Examples:** `hello`, `gallery`, and `settings` (the sample in the docs).
 
-Before the release, two rounds of independent review found 25 and then 21 defects (one blocker: on Windows, the GPU path could stop repainting). All are fixed, most with a regression test; [How it is checked](docs/How-it-is-checked.md) lists them. The fixes that show in the API:
+Before the release, three rounds of independent review found 25, 21 and then 9 defects (one blocker: on Windows, the GPU path could stop repainting). All are fixed, most with a regression test; [How it is checked](docs/How-it-is-checked.md) lists them. The fixes that show in the API:
 
 - `MouseEvent::Kind::cancel`: a press that ends without a release, because the widget was hidden, disabled or removed, or the system took the mouse away.
 - `WindowEvents::on_capture_lost` (for porting): the backend reports a lost mouse capture.

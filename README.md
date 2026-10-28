@@ -4,7 +4,7 @@ A C++20 GUI library for desktop applications that look like current apps without
 
 *Smalti* are the glass tiles of Byzantine mosaics, each set at a slight angle so the wall catches the light.
 
-**Status:** v0.1 "First light" is being finished on the `beta` branch: the look, motion and basic controls. It is verified locally on Windows 11 (MSVC 2022 17.14) and Ubuntu 24.04 under WSL (GCC 14). The API will change during 0.x. Text input arrives in v0.2. Screen readers are not supported before v0.5, so smalti cannot yet be recommended for software that must be accessible. The [wiki](https://github.com/DavidNyholm/Smalti/wiki) (also in [`docs/`](docs/Home.md)) has everything beyond this page.
+**Status:** 0.1.0 "First light" is the first release: the look, motion and basic controls. It is verified locally on Windows 11 (MSVC 2022 17.14) and Ubuntu 24.04 under WSL (GCC 14). The API will change during 0.x. Text input arrives in v0.2. Screen readers are not supported before v0.5, so smalti cannot yet be recommended for software that must be accessible. The [wiki](https://github.com/DavidNyholm/Smalti/wiki) (also in [`docs/`](docs/Home.md)) has everything beyond this page.
 
 ## Quick start
 

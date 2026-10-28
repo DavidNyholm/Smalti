@@ -4,14 +4,14 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 79 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 86 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
 - **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
 - **Lifetimes:** dead `Ref`s are reported and never dereferenced, slot reuse does not revive old `Ref`s, widgets remove themselves from their own callbacks, calls from another thread are refused, 2,000 rounds of building and removing controls and 300 windows opened and closed return to the starting widget count.
 - **Layout, widgets and motion:** stacks, grids, every control by mouse and keyboard, focus order, animations that settle and then request no more frames.
 - **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much.
-- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) and `tests/test_review2.cpp` (round 2: 16 tests). See below.
+- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests). See below.
 
 ```bash
 cmake --preset windows
@@ -27,7 +27,7 @@ Both compilers build with strict warnings (`/W4 /permissive-` on MSVC, `-Wall -W
 
 ## Sanitizers
 
-The `linux-asan` preset builds everything with AddressSanitizer, UndefinedBehaviorSanitizer and LeakSanitizer. Undefined behaviour stops the run rather than printing a note. The whole suite passes clean. Several of the review regressions only fail loudly under it: a read past the end of a buffer or a use after free can go unnoticed in a normal build.
+The `linux-asan` preset builds everything with AddressSanitizer, UndefinedBehaviorSanitizer (with its check for floating-point values too large for the integer they are converted to, which is not on by default) and LeakSanitizer. Undefined behaviour stops the run rather than printing a note. The whole suite passes clean. Several of the review regressions only fail loudly under it: a read past the end of a buffer or a use after free can go unnoticed in a normal build.
 
 ```bash
 cmake --preset linux-asan
@@ -37,9 +37,9 @@ cmake --build --preset linux-asan
 
 ## Injected bugs
 
-A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus eighteen that each undo one of the review fixes below.
+A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus twenty-two that each undo one of the review fixes below.
 
-Result on the current sources, MSVC Debug: **50 of 50 caught**, by a failing test or a crashing test binary, none by a time-out.
+Result on the current sources, MSVC Debug: **54 of 54 caught**, by a failing test or a crashing test binary, none by a time-out.
 
 Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
@@ -60,7 +60,7 @@ The second form runs only the bugs whose description contains the given text. A 
 
 ## Review
 
-Before its release, v0.1 had two rounds of independent code review: read-only passes over the whole source by a reviewer asked to act as a hostile senior engineer, with each finding stated as a concrete failure scenario. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+Before its release, v0.1 had three rounds of independent code review: read-only passes over the whole source by a reviewer asked to act as a hostile senior engineer, with each finding stated as a concrete failure scenario. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
 
 ### Round 1
 
@@ -98,7 +98,7 @@ The review also confirmed, among other things, that ordinary self-removal and wi
 
 ### Round 2
 
-The second round reviewed the round-1 fixes and the rest of the code again. It reported 21 defects (twelve major, nine minor): gaps in seven round-1 fixes, new defects some of those fixes introduced, and older ones round 1 missed. One (an injected bug that no longer applied) had been fixed already; the other 20 are fixed now, 16 of them with a test in `tests/test_review2.cpp` that failed first, two of those under ASan.
+The second round reviewed the round-1 fixes and the rest of the code again. Round 3 judged 12 of these 21 fixes complete and 8 incomplete (the 21st, the injected bug, was already fixed); the incomplete ones are finished in round 3. It reported 21 defects (twelve major, nine minor): gaps in seven round-1 fixes, new defects some of those fixes introduced, and older ones round 1 missed. One (an injected bug that no longer applied) had been fixed already; the other 20 are fixed now, 16 of them with a test in `tests/test_review2.cpp` that failed first, two of those under ASan.
 
 | # | Defect | Fix | Checked by |
 |---|---|---|---|
@@ -124,3 +124,23 @@ The second round reviewed the round-1 fixes and the rest of the code again. It r
 | 21 | The README said every call checks the UI thread; `App`'s own methods did not. | They do now, except `App::post`. | Test |
 
 After both rounds, `hello` on the GPU path still shows "Clicked 3 times." after three clicks and idles at 0.0% CPU, and the animating gallery measured 6.4 to 7.7% of one core over five 10-second runs, against 6.7 to 8.6% for the round-1 build, alternating on the same machine: no difference that this machine's noise lets through.
+
+### Round 3
+
+The third round concentrated on the round-2 changes. It reported 9 defects (five major, four minor), all fixed; `tests/test_review3.cpp` has a test for each of the six that can be reproduced without a screen, plus one for a second case of the grid defect, and each failed first.
+
+| # | Defect | Fix | Checked by |
+|---|---|---|---|
+| 1 | On Windows, a backend failure recorded before `run()` (a window whose construction failed inside a message handler) made the loop skip frames forever without ever ending. | `run()` rethrows a pending failure before it starts. | By reading |
+| 2 | `RadioButton::select()` called from code let its callback free the radio while `select()` was still running. | It counts as event dispatch, like the setters. | Test |
+| 3 | On Windows, posted messages come out of the queue before mouse and keyboard input, so a job that kept posting kept input waiting, though frames now ran. | Each turn handles input first, then the rest. | By reading |
+| 4 | On Windows, a failed wake post set a flag that a loop already going to sleep would not see. | The failure also signals an event that every wait includes. | By reading |
+| 5 | A press handler that disabled and re-enabled its widget still left the press in force. | The press belongs to the widget while its handler runs, so the disable ends it. | Test |
+| 6 | The round-2 grid rule gave a span over a zero-weight stretch column no width at all, and short-changed spans over stretch columns. | A span's shortfall is divided by the part of the growth it keeps once the width is shared out. | Two tests |
+| 7 | A widget could be told it gained focus after the old widget's hook had already hidden it. | It is told only if it still has focus. | Test |
+| 8 | A glyph with almost no area but coordinates beyond an `int` passed the size check and overflowed in the rasterizer. | Coordinates outside the rasterizer's range are refused. | Test, under UBSan's float-to-integer check |
+| 9 | `run()` could return success after a callback failed during its startup cleanup. | It reports that failure. | Test |
+
+After round 3, `hello` on the GPU path still shows "Clicked 3 times." and idles at 0.0% CPU, and the animating gallery measured a median of 7.7% of one core over five 10-second runs.
+
+More rounds would likely find more: each round so far has, partly in the previous round's fixes. Version 0.1.0 is released after round 3 with every reported defect fixed, and the next version starts with another round.
