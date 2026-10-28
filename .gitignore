@@ -1,0 +1,26 @@
+# Build output: generate it yourself with cmake --preset <name>
+build/
+out/
+.vs/
+.vscode/
+.idea/
+CMakeUserPresets.json
+*.user
+
+# Files the examples and tests write
+*.log
+
+# Python caches from tools/
+__pycache__/
+
+# Assistant and agent files belong to whoever uses them, not to the project
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.codex/
+.gemini/
+.cursor/
+.cursorrules
+.aider*

@@ -1,0 +1,8 @@
+# Text is stored and checked out with LF line endings on every platform.
+* text=auto eol=lf
+
+# Binary assets: no line-ending conversion, no text diffs.
+*.ttf binary
+*.otf binary
+*.png binary
+*.ico binary
