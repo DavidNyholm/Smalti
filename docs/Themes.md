@@ -82,14 +82,14 @@ The last column is Dark's value; [`themes/black.jsonc`](../themes/black.jsonc) a
 | `surface.sidebar` | colour | | sidebars, such as the gallery's | `#16171a` |
 | `surface.background` | colour | | the window's background | `#1b1c20` |
 | `surface.raised` | colour | | cards, secondary buttons, check boxes, radio buttons | `#222328` |
-| `line.border` | colour | | outlines of cards, buttons, switches and the slider's knob | `#ffffff 7%` |
+| `line.border` | colour | | outlines of cards, secondary buttons, switches that are off, and the slider's knob | `#ffffff 7%` |
 | `line.divider` | colour | | separators | `#ffffff 6%` |
-| `state.hover` | colour | | the tint under the pointer on ghost buttons | `#ffffff 4%` |
+| `state.hover` | colour | | the tint under the pointer on secondary and ghost buttons | `#ffffff 4%` |
 | `state.selected` | colour | | slider and progress tracks, a switch that is off | `#ffffff 8%` |
 | `text.primary` | colour | | text | `#e7e7ea` |
 | `text.secondary` | colour | | secondary labels, the knob of a switch that is off | `#a3a4ad` |
-| `text.muted` | colour | | muted labels, the edges of unchecked boxes and rings | `#6e7079` |
-| `accent` | colour | | primary buttons, checked boxes, switches and radio buttons, focus rings | `#5b8cf0` |
+| `text.muted` | colour | | captions, the edges of unchecked boxes and rings | `#6e7079` |
+| `accent` | colour | | primary buttons, the text of ghost buttons, checked boxes, switches and radio buttons, focus rings | `#5b8cf0` |
 | `accent.hover` | colour | | primary buttons under the pointer | `#6e9af2` |
 | `accent.on` | colour | | text and marks drawn on the accent | `#ffffff` |
 | `accent.soft` | colour | | a faint accent for your own widgets | `accent 18%` |
@@ -106,8 +106,8 @@ The last column is Dark's value; [`themes/black.jsonc`](../themes/black.jsonc) a
 | `font.body` | font size | 6 to 96 | body text and controls | `14` |
 | `font.title` | font size | 6 to 96 | titles | `18` |
 | `font.heading` | font size | 6 to 96 | headings | `24` |
-| `motion.fast` | duration | 0 to 5000 ms | hover, press, check boxes and radio buttons | `"120ms"` |
-| `motion.base` | duration | 0 to 5000 ms | switches, the slider's fill, a keyboard press | `"200ms"` |
+| `motion.fast` | duration | 0 to 5000 ms | hover and press, check boxes, radio buttons | `"120ms"` |
+| `motion.base` | duration | 0 to 5000 ms | switches, a progress bar's fill, a button let go after a keyboard press | `"200ms"` |
 | `text.blend` | text blend | | how glyph edges blend; `adaptive` keeps light-on-dark and dark-on-light text at a similar weight ([Text and fonts](Text-and-fonts.md)) | `"adaptive"` |
 | `text.contrast` | contrast | -0.5 to 2 | sharpens glyph edges above 0, softens them below | `0.1` |
 | `text.snap` | switch | | stretches text slightly so the x-height lands on a whole pixel | `true` |

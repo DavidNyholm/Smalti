@@ -4,13 +4,14 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 103 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 118 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
 - **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
 - **Lifetimes:** dead `Ref`s are reported and never dereferenced, slot reuse does not revive old `Ref`s, widgets remove themselves from their own callbacks, calls from another thread are refused, 2,000 rounds of building and removing controls and 300 windows opened and closed return to the starting widget count.
 - **Layout, widgets and motion:** stacks, grids, every control by mouse and keyboard, focus order, animations that settle and then request no more frames.
-- **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much.
+- **Theme files** (in `beta`): every value form, and every error with its line and column (`tests/test_theme.cpp`); the reader's syntax errors and its limits (`tests/test_jsonc.cpp`); the built-in theme files against the 0.1 themes, field for field; and 3,000 randomly damaged copies of the built-in files, each of which must give either a theme inside the documented ranges, or errors that point inside the file and the base theme untouched.
+- **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much. It replaces every form of `operator new` that its `delete` frees, the nothrow one included: under AddressSanitizer a form left out comes from the sanitizer, which reports our `free()` of its memory as a mismatch.
 - **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) `tests/test_review4.cpp` (round 4: 12 tests) and `tests/test_review5.cpp` (round 5: 5 tests). See below.
 
 ```bash
@@ -37,9 +38,9 @@ cmake --build --preset linux-asan
 
 ## Injected bugs
 
-A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-four that each undo one of the review fixes below.
+A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-four that each undo one of the review fixes below, and fourteen in the theme file reader and loader.
 
-Result on the current sources, MSVC Debug: **66 of 66 caught**, by a failing test or a crashing test binary, none by a time-out.
+Result on the current sources, MSVC Debug: **80 of 80 caught**, by a failing test or a crashing test binary, none by a time-out.
 
 Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
@@ -54,6 +55,8 @@ After round 2, one injected bug (posted work never running) made a new test hang
 After round 4, the injected bug that ignores the share a span gives back to stretch columns went unseen: with the new solver it only slows convergence, in every case the tests had. It changes the result for a span wider than the whole grid over its only stretch column, which now has a test.
 
 After round 5, one injected bug (reversed slider bounds reaching `std::clamp`) timed out instead of crashing: MSVC's debug check stopped the test binary in a way that waited instead of exiting. The test runner now has MSVC report such checks on stderr and exit at once.
+
+The first run with the theme files caught 13 of their 14. The nesting limit had been tested with arrays only, and objects have a check of their own; a test now nests objects too. One other bug was caught only by a crash: a test read the third error of a list the bug had shortened to two. It now reads the list with `at()`, so such a bug fails the test instead.
 
 ```bash
 python tools/mutate.py --preset windows
@@ -194,3 +197,6 @@ The fifth round concentrated on the round-4 changes. It judged 10 of those 17 fi
 
 After round 5, `hello` on the GPU path still shows "Clicked 3 times." and idles at 0.0% CPU, the gallery measured a median of 5.7% of one core, and the X11 checks on Xvfb and WSLg pass as before.
 
+## Theme files, in beta
+
+The built-in themes became files in `beta`. Read through the new loader, they equal the 0.1 themes field for field (`theme_builtin_files_equal_the_0_1_themes_field_for_field`), and the gallery screenshots that `tools/screenshots.py` renders are byte-identical to those of 0.1.1 in all three themes. `smalti-theme check` and `gallery <file>` were run by hand on Windows with the example on the [Themes](Themes.md) page.
