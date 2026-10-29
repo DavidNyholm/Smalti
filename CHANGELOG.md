@@ -11,6 +11,7 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - New: `gallery <file.jsonc>` opens the gallery in a theme file's theme.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.
 - Build: `cmake/embed_fonts.cmake` became `cmake/embed_files.cmake`, which embeds the themes too.
+- Fixed: the 0.1.1 release still called itself 0.1.0 in its CMake package, so `find_package(smalti 0.1.1)` refused it (`find_package(smalti 0.1)` was not affected).
 
 ## 0.1.1 (2026-10-29)
 
