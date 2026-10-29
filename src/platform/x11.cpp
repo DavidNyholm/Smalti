@@ -496,7 +496,7 @@ void X11Backend::run() {
     pump_events();
     host_.after_events();
     if (quit_) break;
-    int64_t due = INT64_MAX;
+    int64_t due = host_.next_deadline_ns();
     for (X11Window* w : windows_) due = std::min(due, w->next_frame_due());
     int timeout_ms = -1;
     if (due != INT64_MAX)
@@ -511,6 +511,7 @@ void X11Backend::run() {
     }
     pump_events();
     const int64_t now = now_ns();
+    host_.run_timers(now);  // first, so a redraw that is due is drawn in this turn
     const size_t n = windows_.size();
     for (size_t i = 0; i < n && i < windows_.size(); ++i) windows_[i]->run_frame_if_due(now);
     host_.after_events();

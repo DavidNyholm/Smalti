@@ -98,12 +98,14 @@ void Driver::advance(std::chrono::milliseconds time) {
 
 void Driver::frame() {
   if (!window_) return;
+  backend().host().run_timers(backend().now_ns());
   native(window_).run_frame(backend().now_ns());
   backend().host().after_events();
   rethrow_failure();
 }
 
 void Driver::idle() {
+  backend().host().run_timers(backend().now_ns());
   backend().host().after_events();
   rethrow_failure();
 }

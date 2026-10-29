@@ -15,7 +15,7 @@ std::thread worker([&app, status] {
 
 ## The loop
 
-`app.run()` sleeps in the operating system (`MsgWaitForMultipleObjectsEx` on Windows, `poll` on Linux) until input, a requested frame, or posted work arrives. There is no polling and no frame loop: a window that is not animating draws nothing and uses no CPU. `run()` returns when the last window closes or `app.quit()` is called. Calling `run()` again while it is running is a contract violation.
+`app.run()` sleeps in the operating system (`MsgWaitForMultipleObjectsEx` on Windows, `poll` on Linux) until input, a requested frame, posted work, or the time of a timed redraw arrives. There is no polling and no frame loop: a window that is not animating draws nothing and uses no CPU. `run()` returns when the last window closes or `app.quit()` is called. Calling `run()` again while it is running is a contract violation.
 
 Posted work runs in the order it was posted. On Windows it arrives as a window message, so it also runs while the system's own loops are spinning: while a window is moved or resized, a menu is open, or a message box is up. A posted function that itself runs such a loop holds back later posted work until it returns, so the order is never broken.
 
@@ -37,5 +37,7 @@ A widget that is hidden or disabled, or sits inside a container that is, loses k
 ## Frames and motion
 
 Widgets mark what changed (`invalidate()`); the window redraws only those rectangles at its next frame, in step with the display. Animations are values on the frame clock (`animate(motion, target, duration)`, read with `at(motion)`), so they cost nothing between animations and show the right value at any frame rate. With the system's animation setting turned off, they jump straight to the end.
+
+A widget that changes at a later time without input, such as a blinking caret, asks for one frame then: `redraw_after(delay)` or `redraw_at(time)` on the frame clock. The loop sleeps until that time, draws the widget once, and draws nothing in between, so a caret that blinks twice a second costs two frames a second. A widget that is removed or hidden before its time comes is not drawn.
 
 On Windows, frames keep coming while a window is being moved or resized, inside the system's own move-and-size loop.

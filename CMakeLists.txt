@@ -143,6 +143,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_theme.cpp
+    tests/test_timing.cpp
     tests/test_widgets.cpp)
   target_link_libraries(smalti_tests PRIVATE smalti::smalti)
   target_include_directories(smalti_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests)

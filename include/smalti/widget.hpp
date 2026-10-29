@@ -123,6 +123,12 @@ class Widget {
   float at(const Motion& m) const;  // the motion's value at the current frame
   // Asks for one more frame after this one, for animations with no end (indeterminate progress).
   void keep_animating();
+  // Asks for this widget to be drawn again at a time on the frame clock (frame_time_ns()), or
+  // after a delay from now: one frame then, and none before it, so a caret that blinks twice a
+  // second costs two frames a second. An earlier timed redraw that is still waiting stays; the
+  // widget asks again when it draws.
+  void redraw_at(int64_t time_ns);
+  void redraw_after(std::chrono::nanoseconds delay);
   int64_t frame_time_ns() const;
 
  private:

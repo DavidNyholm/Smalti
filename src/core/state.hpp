@@ -61,6 +61,9 @@ struct WindowState final : platform::WindowEvents {
   void invalidate_all();
   void invalidate_layout();
   void animate_until(WidgetId id, int64_t end_ns);
+  void redraw_at(WidgetId id, int64_t time_ns);
+  int64_t next_redraw() const;    // INT64_MAX when no timed redraw is waiting
+  void run_redraws(int64_t now);  // redraws the widgets whose time has come
   int64_t now() const;
   void focus(Widget* w);
   void request_frame();
@@ -116,6 +119,7 @@ struct WindowState final : platform::WindowEvents {
   bool window_focused = true;
   Point last_mouse{-1, -1};
   std::vector<std::pair<WidgetId, int64_t>> animating;  // widget, until when
+  std::vector<std::pair<WidgetId, int64_t>> timed;      // widget, when to redraw it
 };
 
 struct AppState final : platform::BackendHost {
@@ -124,6 +128,8 @@ struct AppState final : platform::BackendHost {
 
   void on_wake() override;
   void after_events() override;
+  int64_t next_deadline_ns() const override;
+  void run_timers(int64_t now_ns) override;
   // Runs fn, catching anything it throws: the first exception stops the loop and is rethrown
   // from run(). Pending removals are processed once the outermost guarded call returns: a
   // callback that opens a nested event loop (a native message box) must not find its own

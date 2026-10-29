@@ -10,6 +10,7 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - New: widget styles. A theme file's `widgets` section sets colours, radii and a disabled opacity per widget, variant and state (hover, pressed, checked, focused, disabled); `Theme::widget_styles` holds them as `StyleRule` values. Every built-in widget now draws through its style, whose defaults are the 0.1 look: the gallery draws the same pixels.
 - Changed: a disabled control dims every part of itself. A switch's outline, a radio button's centre, a slider's track and knob outline, and progress bars used to stay at full strength. (The Widgets page said disabled controls draw at 40% opacity; it has always been 45%.)
 - Changed: a secondary button's outline is no longer tinted under the pointer or while pressed; the tint and the press shade are now part of the button's fill.
+- New: timed redraws. `Widget::redraw_at(time)` and `redraw_after(delay)` draw a widget once at a later time, with the loop asleep until then; the porting interface's `BackendHost` gains `next_deadline_ns()` and `run_timers()` for it.
 - New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
 - New: `gallery <file.jsonc>` opens the gallery in a theme file's theme.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.

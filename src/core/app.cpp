@@ -114,6 +114,17 @@ void AppState::after_events() {
   reap_closed();
 }
 
+int64_t AppState::next_deadline_ns() const {
+  int64_t next = INT64_MAX;
+  for (const auto& w : windows) next = std::min(next, w->state().next_redraw());
+  return next;
+}
+
+void AppState::run_timers(int64_t now_ns) {
+  // By index: a redraw cannot open or close windows, but stays safe if one ever does.
+  for (size_t i = 0; i < windows.size(); ++i) windows[i]->state().run_redraws(now_ns);
+}
+
 }  // namespace detail
 
 App::App(AppOptions options) {

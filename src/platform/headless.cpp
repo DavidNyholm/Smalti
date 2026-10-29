@@ -42,6 +42,7 @@ void HeadlessBackend::advance(int64_t ns) {
   const int64_t end = now_ + ns;
   while (now_ < end) {
     now_ = std::min(end, now_ + kFrameNs);
+    host_.run_timers(now_);
     // By index: closed windows are destroyed only in after_events, so the list cannot shrink
     // during these frames, and windows opened by a frame simply wait for the next one.
     const size_t count = windows_.size();
@@ -61,6 +62,7 @@ void HeadlessBackend::run() {
       busy = true;
     }
     for (HeadlessWindow* w : windows_) busy |= w->frame_requested();
+    busy |= host_.next_deadline_ns() != INT64_MAX;  // timed work waits on the fake clock
     if (!busy) break;
     advance(kFrameNs);
   }

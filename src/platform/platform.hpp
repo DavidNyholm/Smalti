@@ -71,6 +71,13 @@ class BackendHost {
   // Called by the event loop after each batch of OS events, outside any window procedure: the
   // safe point where closed windows are destroyed.
   virtual void after_events() = 0;
+  // The earliest time, on now_ns()'s clock, that the host has timed work for (a widget's timed
+  // redraw, the pause before a theme reloads); INT64_MAX when it has none. The loop's wait
+  // ends by then, so timed work needs no polling.
+  virtual int64_t next_deadline_ns() const = 0;
+  // Runs the timed work due by `now_ns`. Called by the loop on every turn, before frames, so
+  // a redraw it asks for is drawn in the same turn.
+  virtual void run_timers(int64_t now_ns) = 0;
 
  protected:
   ~BackendHost() = default;

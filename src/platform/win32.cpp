@@ -780,6 +780,7 @@ void Win32Backend::adopt_gpu_if_ready() {
 void Win32Backend::run_due_frames() {
   if (error_) return;  // a window's buffers may be gone; run() rethrows the error instead
   const int64_t now = now_ns();
+  host_.run_timers(now);  // first, so a redraw that is due is drawn in this turn
   // By index: closed windows are destroyed only in after_events, so the list cannot shrink
   // during these frames.
   const size_t count = windows_.size();
@@ -828,6 +829,7 @@ void Win32Backend::run() {
         due = std::min(due, now + w->period_ns());
       }
     }
+    due = std::min(due, host_.next_deadline_ns());
     DWORD timeout = INFINITE;
     if (due <= now) {
       timeout = 0;  // a frame may run already: just collect what is waiting

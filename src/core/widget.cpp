@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "core/state.hpp"
 #include "smalti/app.hpp"
@@ -200,6 +201,18 @@ void Widget::animate(Motion& m, float target, std::chrono::milliseconds duration
 
 void Widget::keep_animating() {
   if (auto* ws = detail::window_state_of(*this)) ws->animate_until(id_, ws->now() + 1);
+}
+
+void Widget::redraw_at(int64_t time_ns) {
+  if (auto* ws = detail::window_state_of(*this)) ws->redraw_at(id_, time_ns);
+}
+
+void Widget::redraw_after(std::chrono::nanoseconds delay) {
+  auto* ws = detail::window_state_of(*this);
+  if (!ws) return;
+  const int64_t now = ws->now();
+  // Saturating: a delay too long for the clock means never, not an overflow into the past.
+  ws->redraw_at(id_, delay.count() > INT64_MAX - now ? INT64_MAX : now + delay.count());
 }
 
 int64_t Widget::frame_time_ns() const {

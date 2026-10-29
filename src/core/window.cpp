@@ -174,6 +174,34 @@ void WindowState::animate_until(WidgetId id, int64_t end_ns) {
   request_frame();
 }
 
+void WindowState::redraw_at(WidgetId id, int64_t time_ns) {
+  for (auto& [wid, when] : timed) {
+    if (wid == id) {
+      when = std::min(when, time_ns);  // the earlier stays; the widget asks again when it draws
+      return;
+    }
+  }
+  timed.emplace_back(id, time_ns);
+}
+
+int64_t WindowState::next_redraw() const {
+  int64_t next = INT64_MAX;
+  for (const auto& [id, when] : timed) next = std::min(next, when);
+  return next;
+}
+
+void WindowState::run_redraws(int64_t now) {
+  for (auto it = timed.begin(); it != timed.end();) {
+    if (it->second > now) {
+      ++it;
+      continue;
+    }
+    // A widget removed or hidden since it asked has nothing to redraw.
+    if (Widget* w = find(it->first); w && w->visible()) w->invalidate();
+    it = timed.erase(it);
+  }
+}
+
 void WindowState::draw(int64_t frame_time_ns) {
   // A paint() that runs a nested event loop (a native message box) must not get a frame of this
   // window drawn inside the one it is part of: that one waits until this frame is done.
