@@ -157,22 +157,27 @@ float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size,
                 std::string_view utf8, Color color, const TextTuning& tuning) {
   const float scale = size / static_cast<float>(font.units_per_em());
   const float y_scale = tuning.snap_x_height ? x_height_scale(font, size) : 1.0f;
-  if (!(std::fabs(origin.y) < kMaxDeviceCoord)) return origin.x;  // nowhere near the canvas
-  const int baseline = static_cast<int>(std::lround(origin.y));
+  // Glyphs placed beyond the canvas's working range cannot become int positions and are not
+  // drawn, but the pen still moves on: a long line that starts far to the left may still reach
+  // the canvas, and the caller needs to know where the line ends.
+  const bool row_drawable = std::fabs(origin.y) < kMaxDeviceCoord;
+  const int baseline = row_drawable ? static_cast<int>(std::lround(origin.y)) : 0;
   float pen = origin.x;
   uint16_t prev = 0;
   for (size_t i = 0; i < utf8.size();) {
     const uint16_t g = font.glyph_index(next_codepoint(utf8, i));
     if (prev) pen += static_cast<float>(font.kerning(prev, g)) * scale;
-    if (!(std::fabs(pen) < kMaxDeviceCoord)) break;  // the rest of the line is off the canvas too
-    int whole = static_cast<int>(std::floor(pen));
-    int quarter = static_cast<int>(std::lround((pen - static_cast<float>(whole)) * kSubpixelSteps));
-    if (quarter == kSubpixelSteps) {
-      ++whole;
-      quarter = 0;
+    if (row_drawable && std::fabs(pen) < kMaxDeviceCoord) {
+      int whole = static_cast<int>(std::floor(pen));
+      int quarter =
+          static_cast<int>(std::lround((pen - static_cast<float>(whole)) * kSubpixelSteps));
+      if (quarter == kSubpixelSteps) {
+        ++whole;
+        quarter = 0;
+      }
+      const MaskView m = cache.get(font, g, size, quarter, y_scale);
+      if (!m.empty()) canvas.blend_glyph(m, whole + m.x, baseline + m.y, color, tuning);
     }
-    const MaskView m = cache.get(font, g, size, quarter, y_scale);
-    if (!m.empty()) canvas.blend_glyph(m, whole + m.x, baseline + m.y, color, tuning);
     pen += static_cast<float>(font.advance(g)) * scale;
     prev = g;
   }

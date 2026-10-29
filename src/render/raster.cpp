@@ -18,8 +18,14 @@ constexpr int kMaxCurveSegments = 256;
 // Each row keeps two spare cells: an edge clamped to the right border writes one past it.
 constexpr int kRowSlack = 2;
 
-float length(Point v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 Point lerp(Point a, Point b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
+
+// Segments for a curve from Wang's estimate, clamped while still floating point: points far out
+// make the estimate infinite (or NaN), which no int holds.
+int curve_segments(double estimate, int most) {
+  if (!(estimate >= 1.0)) return 1;
+  return static_cast<int>(std::min(std::ceil(estimate), static_cast<double>(most)));
+}
 
 }  // namespace
 
@@ -178,9 +184,9 @@ void Rasterizer::accumulate_line(Point p0, Point p1) {
 
 void Rasterizer::quad(Point p0, Point c, Point p1) {
   // Wang's formula: segments needed so no chord strays more than the tolerance from the curve.
-  const float dd = length({p0.x - 2 * c.x + p1.x, p0.y - 2 * c.y + p1.y});
-  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(dd / (4.0f * kFlattenTolerance)))),
-                           1, kMaxCurveSegments);
+  // In double: far-off points square past what a float holds.
+  const double dd = std::hypot(double{p0.x} - 2.0 * c.x + p1.x, double{p0.y} - 2.0 * c.y + p1.y);
+  const int n = curve_segments(std::sqrt(dd / (4.0 * kFlattenTolerance)), kMaxCurveSegments);
   Point prev = p0;
   for (int k = 1; k <= n; ++k) {
     const float t = static_cast<float>(k) / static_cast<float>(n), u = 1.0f - t;
@@ -192,10 +198,10 @@ void Rasterizer::quad(Point p0, Point c, Point p1) {
 }
 
 void Rasterizer::cubic(Point p0, Point c1, Point c2, Point p1) {
-  const float dd = std::max(length({p0.x - 2 * c1.x + c2.x, p0.y - 2 * c1.y + c2.y}),
-                            length({c1.x - 2 * c2.x + p1.x, c1.y - 2 * c2.y + p1.y}));
-  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(0.75f * dd / kFlattenTolerance))),
-                           1, kMaxCurveSegments);
+  const double dd =
+      std::max(std::hypot(double{p0.x} - 2.0 * c1.x + c2.x, double{p0.y} - 2.0 * c1.y + c2.y),
+               std::hypot(double{c1.x} - 2.0 * c2.x + p1.x, double{c1.y} - 2.0 * c2.y + p1.y));
+  const int n = curve_segments(std::sqrt(0.75 * dd / kFlattenTolerance), kMaxCurveSegments);
   Point prev = p0;
   for (int k = 1; k <= n; ++k) {
     const float t = static_cast<float>(k) / static_cast<float>(n), u = 1.0f - t;

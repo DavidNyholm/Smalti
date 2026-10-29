@@ -103,7 +103,10 @@ void Driver::frame() {
   rethrow_failure();
 }
 
-void Driver::idle() { backend().host().after_events(); }
+void Driver::idle() {
+  backend().host().after_events();
+  rethrow_failure();
+}
 
 int Driver::width() const { return native(window_).bitmap().width; }
 int Driver::height() const { return native(window_).bitmap().height; }
@@ -117,5 +120,7 @@ uint32_t Driver::pixel(int x, int y) const {
 bool Driver::frame_requested() const { return native(window_).frame_requested(); }
 
 int Driver::frames_drawn() const { return window_->state().frames_drawn; }
+
+Cursor Driver::cursor() const { return native(window_).cursor(); }
 
 }  // namespace smalti::testing

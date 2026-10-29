@@ -241,6 +241,7 @@ void WindowState::set_hovered(Widget* w) {
   // the nested call has already set the cursor.
   if (hovered != id) return;
   if (w) w->on_hover_changed(true);
+  if (hovered != id) return;  // its own hook moved the hover on (or hid it): the cursor is set
   if (native) native->set_cursor(w && w->enabled() ? w->cursor() : Cursor::arrow);
 }
 
@@ -317,6 +318,14 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
         down ? MouseEvent::Kind::press : MouseEvent::Kind::release, p, button, mods, {}, clicks};
     const bool pressing = pressed != WidgetId{};
     if (!down) {
+      // A press still being set up (a focus hook ran a nested loop) ends here, before any widget
+      // took it.
+      if (press_pending && !pressing && button == pressed_button) {
+        press_pending = false;
+        ++press_serial;
+        set_hovered(hit_test(p));
+        return;
+      }
       if (!pressing || button != pressed_button) {
         set_hovered(hit_test(p));  // only the button that started the press ends it
         return;
@@ -336,7 +345,7 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
       set_hovered(hit_test(p));
       return;
     }
-    if (pressing) return;  // one press at a time: another button waits for it to end
+    if (pressing || press_pending) return;  // one press at a time: another button waits
     if (keyboard_mode) {
       keyboard_mode = false;  // the pointer is in use: hide the focus ring
       if (Widget* f = find(focused)) f->invalidate();
@@ -346,8 +355,17 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
     while (focus_target && !(focus_target->focusable() && focus_target->enabled())) {
       focus_target = Tree::parent_of(*focus_target);
     }
-    focus(focus_target);
+    // The press is under way from here: a release of this button pumped by a focus hook's nested
+    // loop ends it before any widget takes it.
+    press_pending = true;
+    pressed_button = button;
+    struct EndPending {
+      bool& flag;
+      ~EndPending() { flag = false; }
+    } end_pending{press_pending};
     const uint64_t interaction = press_serial;
+    focus(focus_target);
+    if (press_serial != interaction) return;  // released already
     for (Widget* w = target; w; w = Tree::parent_of(*w)) {
       if (!eligible(*w)) continue;
       // The press is this widget's while its handler runs, so hiding, disabling or removing it

@@ -110,6 +110,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review2.cpp
     tests/test_review3.cpp
     tests/test_review4.cpp
+    tests/test_review5.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_widgets.cpp)

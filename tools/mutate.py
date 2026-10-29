@@ -261,6 +261,41 @@ MUTATIONS = [
         "a keyboard click shows no press",
         [("  press_ = Motion{1, 1, 0, 0, press_.easing};", "  press_.from = 1;")],
     ),
+    (
+        "core/window.cpp",
+        "a press released by a focus hook still reaches a widget",
+        [("    if (press_serial != interaction) return;  // released already\n", "")],
+    ),
+    (
+        "core/window.cpp",
+        "a widget's own hover hook can leave its cursor behind",
+        [
+            (
+                "  if (hovered != id) return;  // its own hook moved the hover on (or hid it): the cursor is set\n",
+                "",
+            )
+        ],
+    ),
+    (
+        "core/testing.cpp",
+        "the test driver's idle() swallows exceptions from cleanup",
+        [
+            (
+                "  backend().host().after_events();\n  rethrow_failure();\n}\n\nint Driver::width",
+                "  backend().host().after_events();\n}\n\nint Driver::width",
+            )
+        ],
+    ),
+    (
+        "render/text.cpp",
+        "text far off the canvas ends where it started",
+        [
+            (
+                "  const int baseline = row_drawable ? static_cast<int>(std::lround(origin.y)) : 0;",
+                "  if (!row_drawable) return origin.x;\n  const int baseline = static_cast<int>(std::lround(origin.y));",
+            )
+        ],
+    ),
     # Layout
     (
         "core/layout.cpp",

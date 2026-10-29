@@ -35,6 +35,7 @@ class Driver {
   uint32_t pixel(int x, int y) const;  // 0xAARRGGBB
   bool frame_requested() const;        // would a real window draw again without new input?
   int frames_drawn() const;
+  Cursor cursor() const;  // the mouse cursor the window shows now
 
  private:
   Ref<Window> window_;

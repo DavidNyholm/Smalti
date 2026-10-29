@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <exception>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -245,12 +246,15 @@ class Win32Backend final : public PlatformBackend {
   }
   // Runs every window's frame that is due; also from inside Windows' own modal loops.
   void run_due_frames();
-  void on_wake_message();
+  void on_wake_message(bool from_timer);
   void retry_wake();  // from the thread pool: posts the wake that failed, or tries again later
 
  private:
   void adopt_gpu_if_ready();
   void rethrow_error();  // if a backend failure is pending
+  void arm_retry();      // the retry timer, unless the backend is shutting down
+  // Whether mouse or keyboard input, or painting, waits in this (the UI) thread's queue.
+  static bool input_waiting() { return HIWORD(GetQueueStatus(QS_INPUT | QS_PAINT)) != 0; }
   void dispatch_messages(UINT filter);
 
   BackendHost& host_;
@@ -264,6 +268,10 @@ class Win32Backend final : public PlatformBackend {
   // timer, armed only after a failure: a flag the UI thread checks would be missed by native
   // modal loops (a message box), which never look at our flags.
   PTP_TIMER wake_retry_ = nullptr;
+  // Arming the retry timer and closing it are serialised: a retry running while the backend
+  // shuts down must not arm the timer again after it was disarmed.
+  std::mutex retry_mutex_;
+  bool retry_closed_ = false;
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
@@ -291,10 +299,11 @@ void CALLBACK wake_retry_callback(PTP_CALLBACK_INSTANCE, void* backend, PTP_TIME
 }
 
 LRESULT CALLBACK wake_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-  if (msg == WM_TIMER && wp == kWakeTimer) KillTimer(hwnd, kWakeTimer);
-  if (msg == kWakeMessage || (msg == WM_TIMER && wp == kWakeTimer)) {
+  const bool timer = msg == WM_TIMER && wp == kWakeTimer;
+  if (timer) KillTimer(hwnd, kWakeTimer);
+  if (msg == kWakeMessage || timer) {
     if (auto* b = reinterpret_cast<Win32Backend*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
-      b->on_wake_message();
+      b->on_wake_message(timer);
     return 0;
   }
   return DefWindowProcW(hwnd, msg, wp, lp);
@@ -668,16 +677,22 @@ Win32Backend::Win32Backend(Presentation presentation, BackendHost& host) : host_
         gpu_done_ = true;
         wake();
       });
-    } catch (const std::system_error&) {
-      gpu_done_ = true;  // no thread to make the device on: the CPU path, which already works
+    } catch (...) {
+      // No thread to make the device on (no memory for it, or the system refused one): the CPU
+      // path, which already works.
+      gpu_done_ = true;
     }
   }
 }
 
 Win32Backend::~Win32Backend() {
   if (gpu_thread_.joinable()) gpu_thread_.join();
-  SetThreadpoolTimer(wake_retry_, nullptr, 0, 0);  // no new retries, then wait out a running one
-  WaitForThreadpoolTimerCallbacks(wake_retry_, TRUE);
+  {
+    const std::lock_guard lock(retry_mutex_);
+    retry_closed_ = true;
+    SetThreadpoolTimer(wake_retry_, nullptr, 0, 0);
+  }
+  WaitForThreadpoolTimerCallbacks(wake_retry_, TRUE);  // a running retry cannot arm it again
   CloseThreadpoolTimer(wake_retry_);
   DestroyWindow(wake_window_);  // a wake still queued for it is dropped with it
   CloseHandle(frame_timer_);
@@ -688,30 +703,43 @@ void Win32Backend::wake() {
   // of a message. Every message loop, native dialogs' included, hands out posted messages
   // before input and timers after it, so a job that keeps posting cannot keep the mouse and
   // keyboard waiting, here or under a message box.
-  if (std::this_thread::get_id() == ui_thread_ &&
-      HIWORD(GetQueueStatus(QS_INPUT | QS_PAINT)) != 0) {
-    SetTimer(wake_window_, kWakeTimer, USER_TIMER_MINIMUM, nullptr);
+  if (std::this_thread::get_id() == ui_thread_ && input_waiting() &&
+      SetTimer(wake_window_, kWakeTimer, USER_TIMER_MINIMUM, nullptr) != 0) {
     return;
   }
+  // (No timer to be had: a message, late for the input but better than none.)
   // One message in the queue is enough however many wakes there are; on_wake drains all work.
   if (wake_posted_.exchange(true)) return;
   if (!PostMessageW(wake_window_, kWakeMessage, 0, 0)) {
     // A full queue. The work must not wait for another post that may never come.
     wake_posted_ = false;
-    FILETIME due{static_cast<DWORD>(kWakeRetry100ns), static_cast<DWORD>(kWakeRetry100ns >> 32)};
-    SetThreadpoolTimer(wake_retry_, &due, 0, 0);
+    arm_retry();
   }
+}
+
+void Win32Backend::arm_retry() {
+  const std::lock_guard lock(retry_mutex_);
+  if (retry_closed_) return;
+  FILETIME due{static_cast<DWORD>(kWakeRetry100ns), static_cast<DWORD>(kWakeRetry100ns >> 32)};
+  SetThreadpoolTimer(wake_retry_, &due, 0, 0);
 }
 
 void Win32Backend::retry_wake() {
   if (wake_posted_.exchange(true)) return;  // something else posted one meanwhile
   if (PostMessageW(wake_window_, kWakeMessage, 0, 0)) return;
   wake_posted_ = false;
-  FILETIME due{static_cast<DWORD>(kWakeRetry100ns), static_cast<DWORD>(kWakeRetry100ns >> 32)};
-  SetThreadpoolTimer(wake_retry_, &due, 0, 0);  // still full: once more, later
+  arm_retry();  // still full: once more, later
 }
 
-void Win32Backend::on_wake_message() {
+void Win32Backend::on_wake_message(bool from_timer) {
+  // A wake message is handed out ahead of waiting input, in every message loop (a native
+  // dialog's too). If input or painting waits, the work waits for a timer, which comes after
+  // them; wake_posted_ stays set meanwhile, so wakes from other threads add no messages ahead
+  // of the input either.
+  if (!from_timer && input_waiting() &&
+      SetTimer(wake_window_, kWakeTimer, USER_TIMER_MINIMUM, nullptr) != 0) {
+    return;
+  }
   wake_posted_ = false;  // before draining: work posted from now on needs a new message
   try {
     adopt_gpu_if_ready();
