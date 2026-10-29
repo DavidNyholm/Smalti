@@ -329,8 +329,8 @@ Win32Window::Win32Window(Win32Backend& backend, const WindowOptions& options, Wi
     // landed on.
     const UINT dpi = GetDpiForWindow(hwnd_);
     scale_ = static_cast<float>(dpi) / kDefaultDpi;
-    RECT r{0, 0, static_cast<LONG>(std::lround(options.size.width * scale_)),
-           static_cast<LONG>(std::lround(options.size.height * scale_))};
+    RECT r{0, 0, window_pixels(options.size.width, scale_),
+           window_pixels(options.size.height, scale_)};
     AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -587,8 +587,7 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       break;
     case WM_GETMINMAXINFO: {
       auto* mm = reinterpret_cast<MINMAXINFO*>(lp);
-      RECT r{0, 0, static_cast<LONG>(min_size_.width * scale_),
-             static_cast<LONG>(min_size_.height * scale_)};
+      RECT r{0, 0, window_pixels(min_size_.width, scale_), window_pixels(min_size_.height, scale_)};
       AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0,
                                static_cast<UINT>(scale_ * kDefaultDpi));
       mm->ptMinTrackSize = {r.right - r.left, r.bottom - r.top};

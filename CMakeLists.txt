@@ -52,11 +52,11 @@ add_library(smalti STATIC
   "${smalti_generated}/inter_fonts.cpp"
   "${smalti_generated}/builtin_themes.cpp")
 add_library(smalti::smalti ALIAS smalti)
-# Watching a theme file for live reload, through each system's own notifications.
+# Reading and watching theme files (live reload), through each system's own calls.
 if(WIN32)
-  target_sources(smalti PRIVATE src/platform/file_watch_win32.cpp)
+  target_sources(smalti PRIVATE src/platform/file_watch_win32.cpp src/platform/read_file_win32.cpp)
 elseif(UNIX AND NOT APPLE)
-  target_sources(smalti PRIVATE src/platform/file_watch_linux.cpp)
+  target_sources(smalti PRIVATE src/platform/file_watch_linux.cpp src/platform/read_file_posix.cpp)
 else()
   message(FATAL_ERROR "smalti: no file watcher for this system yet (see docs/Porting-to-a-new-platform.md)")
 endif()
@@ -154,6 +154,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review3.cpp
     tests/test_review4.cpp
     tests/test_review5.cpp
+    tests/test_review6.cpp
     tests/test_styles.cpp
     tests/test_ref.cpp
     tests/test_reload.cpp

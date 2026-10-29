@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
+#include <type_traits>
 
 #include "core/state.hpp"
 
@@ -251,9 +252,14 @@ void App::post(Callback<void()> fn) {
 
 void App::set_theme(const Theme& theme) {
   detail::Registry::instance().check_thread();
-  detail::WidgetStyles styles = detail::compute_widget_styles(theme);  // checks its rules first
-  state_->theme = theme;
-  state_->styles = std::move(styles);
+  // Everything that can fail (the copy allocates; the styles check their rules) happens before
+  // anything changes, and the change itself cannot fail: never a new theme with old styles.
+  Theme copy = theme;
+  const detail::WidgetStyles styles = detail::compute_widget_styles(copy);
+  static_assert(std::is_nothrow_move_assignable_v<Theme>);
+  static_assert(std::is_nothrow_copy_assignable_v<detail::WidgetStyles>);
+  state_->theme = std::move(copy);
+  state_->styles = styles;
   for (auto& w : state_->windows) {
     w->state().native->set_dark_frame(theme.dark);
     w->state().invalidate_layout();

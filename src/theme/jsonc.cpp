@@ -110,10 +110,14 @@ class Reader {
 
   // Consumes one character (code point). The text is valid UTF-8 by the time this runs.
   void step() {
-    if (s_[i_] == '\n') {
+    const char c = s_[i_];
+    // A line ends at \n, \r\n or a lone \r, as editors count lines.
+    if (c == '\n' || (c == '\r' && peek_at(1) != '\n')) {
       ++pos_.line;
       pos_.column = 1;
       ++i_;
+    } else if (c == '\r') {
+      ++i_;  // the \n after it ends the line
     } else {
       i_ += utf8_length(s_, i_);
       ++pos_.column;
@@ -160,7 +164,7 @@ class Reader {
       if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
         step();
       } else if (c == '/' && peek_at(1) == '/') {
-        while (!at_end() && peek() != '\n') step();
+        while (!at_end() && peek() != '\n' && peek() != '\r') step();
       } else if (c == '/' && peek_at(1) == '*') {
         const TextPos start = pos_;
         step();
@@ -289,7 +293,7 @@ class Reader {
         step();
         return true;
       }
-      if (c == '\n') {
+      if (c == '\n' || c == '\r') {
         return fail_at(start, "this string is not closed before the end of the line");
       }
       if (static_cast<uint8_t>(c) < 0x20) {

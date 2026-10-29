@@ -46,7 +46,7 @@ if (r.ok()) {
 
 ## The file
 
-- JSON, plus `//` and `/* */` comments and trailing commas: what VS Code calls jsonc. UTF-8; a byte-order mark at the start is skipped.
+- JSON, plus `//` and `/* */` comments and trailing commas: what VS Code calls jsonc. UTF-8; a byte-order mark at the start is skipped. Lines may end in LF, CR LF or CR alone, as any editor saves them.
 - The top level is an object with up to four keys, all optional:
 
 | Key | Value |
@@ -135,7 +135,7 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 - **Properties** at the top of a widget's style are its colours at rest, and `radius` for the widgets that have one. Their values are written as token values are: a colour as `#rrggbb`, `#rrggbbaa`, a colour token, or either with an opacity; `radius` as a number or a radius token.
 - **States** are blocks beside the properties: `hover`, `pressed`, `checked`, `focused` and `disabled`, each setting colours for that state. A state's colour fades in with the widget's own motion (under the pointer, over `motion.fast`). They apply in that order, so where `hover` and `checked` both set a colour, a checked box under the pointer shows the checked one. `focused` means keyboard focus, while the focus ring shows, and applies at once.
 - **Disabled** can set colours, which are then drawn as they are, and `opacity`, a percentage that a disabled control's colours are multiplied by: `"45%"` unless set.
-- **A state you do not set keeps its built-in look.** Most built-in states are tokens (a primary button's hover is `accent.hover`, so a file that changes its fill should set its hover fill too). Two are relative: under the pointer, secondary and ghost buttons lay `state.hover` (half again as strong) over their fill, whatever the fill is; and a pressed button of any variant darkens its hover fill with 12% black.
+- **A state you do not set keeps its built-in look.** Most built-in states are tokens (a primary button's hover is `accent.hover`, so a file that changes its fill should set its hover fill too). Three are relative to the colour below them: under the pointer, secondary and ghost buttons lay `state.hover` (half again as strong, at most opaque) over their fill, whatever the fill is; a pressed button of any variant darkens its hover fill with 12% black; and a switch's knob moves halfway from its colour towards `text.primary`.
 
 | Widget | Variants | Colours | Radius | States |
 |---|---|---|---|---|
@@ -191,7 +191,7 @@ night.jsonc:7:23: "radius.control" takes a radius from 0 to 100, or the name of 
 
 - Line and column are 1-based, and the column counts characters, as editors do. A file that cannot be read at all (missing, a folder, too large) is one error at line 0.
 - A syntax error stops reading at that point, so it is reported alone. Otherwise every unknown key, wrong value and loop is reported, up to 100, followed by a count of the rest. In the `widgets` section, a name that is not a widget, variant, state or property is reported with the names that would have been valid there.
-- Limits, so any file costs little to read: 1 MB per file, objects and arrays nested at most 32 deep, 64 KB per string, 65536 values.
+- Limits, so any file costs little to read: 1 MB per file, objects and arrays nested at most 32 deep, 64 KB per string, 65536 values. A theme file is a regular file: a pipe or a device is refused rather than read.
 - A theme is data only: it cannot run code, and reading one touches nothing but that file. That is what makes it safe to load a theme from anywhere, a user's included.
 - `smalti-theme check` prints the same errors as `file:line:column: message` and exits with 1 when any file has one, 2 when the command line is wrong.
 

@@ -30,7 +30,6 @@ namespace smalti::platform {
 namespace {
 
 constexpr double kRefreshHz = 60.0;  // XRandR is not consulted yet; 60 Hz is the safe default
-constexpr float kDefaultDpi = 96.0f;
 constexpr float kWheelNotchPixels = 120.0f;  // one wheel notch, in logical pixels
 constexpr unsigned long kDoubleClickMs = 400;
 constexpr int kDoubleClickSlop = 4;  // pixels the pointer may move between the two clicks
@@ -56,8 +55,7 @@ float display_scale(Display* d) {
   XrmValue value{};
   float scale = 1.0f;
   if (XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &value) && value.addr) {
-    const float dpi = std::strtof(value.addr, nullptr);
-    if (dpi > 0) scale = dpi / kDefaultDpi;
+    scale = scale_from_dpi_text(value.addr);
   }
   XrmDestroyDatabase(db);
   return scale;
@@ -218,8 +216,8 @@ class X11Backend final : public PlatformBackend {
 X11Window::X11Window(X11Backend& backend, const WindowOptions& options, WindowEvents& events)
     : backend_(backend), events_(events), display_(backend.display()), scale_(backend.scale()) {
   const int screen = DefaultScreen(display_);
-  const int w = std::max(1, static_cast<int>(std::lround(options.size.width * scale_)));
-  const int h = std::max(1, static_cast<int>(std::lround(options.size.height * scale_)));
+  const int w = window_pixels(options.size.width, scale_);
+  const int h = window_pixels(options.size.height, scale_);
   XSetWindowAttributes attrs{};
   attrs.background_pixmap = None;  // no flash of the server's background: we draw everything
   attrs.event_mask = kEventMask;
@@ -232,8 +230,8 @@ X11Window::X11Window(X11Backend& backend, const WindowOptions& options, WindowEv
     XSetWMProtocols(display_, window_, &delete_atom, 1);
     if (XSizeHints* hints = XAllocSizeHints()) {
       hints->flags = PMinSize;
-      hints->min_width = static_cast<int>(options.min_size.width * scale_);
-      hints->min_height = static_cast<int>(options.min_size.height * scale_);
+      hints->min_width = window_pixels(options.min_size.width, scale_);
+      hints->min_height = window_pixels(options.min_size.height, scale_);
       XSetWMNormalHints(display_, window_, hints);
       XFree(hints);
     }

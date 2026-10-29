@@ -69,6 +69,14 @@ float dither_noise(int x, int y) {
   return g - std::floor(g);
 }
 
+// A colour as the canvas stores it: every component in 0..1, and NaN as 0. Colours reach the
+// canvas from themes and custom widgets; an alpha of 1.5 would otherwise wrap the packed
+// channels into a wrong colour.
+Color unit(Color c) {
+  const auto clamp01 = [](float v) { return v > 0 ? (v < 1 ? v : 1.0f) : 0.0f; };  // NaN: 0
+  return {clamp01(c.r), clamp01(c.g), clamp01(c.b), clamp01(c.a)};
+}
+
 // Blends a float sRGB colour over a pixel with float alpha, rounding with or without dither.
 uint32_t blend_float(uint32_t dst, Color c, float a, float noise) {
   const float inv = 1.0f - a;
@@ -135,6 +143,7 @@ void Canvas::clear(Color c) {
 }
 
 void Canvas::fill_rect(RectF r, Color c) {
+  c = unit(c);
   if (!whole_pixels(r)) {
     path_.clear();
     path_.rounded_rect(r, 0);
@@ -210,6 +219,7 @@ void Canvas::stroke_polyline(std::span<const Point> pts, float width, Color c) {
 
 void Canvas::blend_mask(MaskView m, Color c) {
   if (m.empty()) return;
+  c = unit(c);
   const int sr = static_cast<int>(std::lround(c.r * 255)),
             sg = static_cast<int>(std::lround(c.g * 255));
   const int sb = static_cast<int>(std::lround(c.b * 255)),
@@ -230,6 +240,7 @@ void Canvas::blend_mask(MaskView m, Color c) {
 }
 
 void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, RectF occluder) {
+  c = unit(c);
   // Blur and corner are snapped to 1/64 px before anything uses them, so the cached corner tile
   // for a key was made from exactly the values that look it up (and is the same size).
   sigma = std::round(sigma * kShadowKeySteps) / kShadowKeySteps;
@@ -349,6 +360,8 @@ const std::vector<float>* Canvas::shadow_corner(float sigma, float corner, int s
 }
 
 void Canvas::rounded_gradient(RectF r, float radius, Color top, Color bottom, bool dither) {
+  top = unit(top);
+  bottom = unit(bottom);
   path_.clear();
   path_.rounded_rect(r, radius);
   const MaskView m = raster_.fill(path_, {}, clip_);
@@ -367,6 +380,7 @@ void Canvas::rounded_gradient(RectF r, float radius, Color top, Color bottom, bo
 }
 
 void Canvas::blend_glyph(MaskView m, int ox, int oy, Color c, const TextTuning& tuning) {
+  c = unit(c);
   const GammaTables& gt = gamma();
   const float lin_r = srgb_to_linear(c.r), lin_g = srgb_to_linear(c.g), lin_b = srgb_to_linear(c.b);
   const float luminance = 0.2126f * lin_r + 0.7152f * lin_g + 0.0722f * lin_b;

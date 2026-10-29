@@ -54,7 +54,6 @@ struct TokenValue {
 // A token's value as written: a literal, or another token's value (a colour's opacity scaled).
 struct TokenExpr {
   TextPos pos;
-  bool in_file = false;  // from the file being read, not from its base
   int ref = -1;          // the token it refers to; -1 for a literal
   float opacity = 1;
   TokenValue literal;

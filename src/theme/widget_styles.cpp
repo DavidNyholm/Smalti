@@ -2,6 +2,7 @@
 // tokens give it (exactly what 0.1 drew), and the theme's rules applied over it.
 #include "theme/widget_styles.hpp"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -103,7 +104,8 @@ void button_defaults(StyleState stage, ButtonVariant v, const Theme& th, WidgetS
       } else if (v == ButtonVariant::danger) {
         set(s, S::fill, stage, th.danger.with_alpha(kDangerFill + kDangerFillHoverGain));
       } else {
-        const Color tint = th.hover.with_alpha(th.hover.a * kHoverTintStrength);
+        // Strengthened, but never past opaque: a theme may make state.hover opaque.
+        const Color tint = th.hover.with_alpha(std::min(1.0f, th.hover.a * kHoverTintStrength));
         set(s, S::fill, stage, over(rest(s, S::fill), tint));
       }
       return;
@@ -152,7 +154,8 @@ void defaults(StyleState stage, StyledWidget w, size_t variant, const Theme& th,
         set(s, S::text, stage, th.text);
         set(s, S::focus, stage, th.accent);
       } else if (stage == StyleState::hover) {
-        set(s, S::knob, stage, Color::mix(rest(s, S::knob), th.text, kSwitchKnobHoverMix));
+        // Blended, not mixed: a transparent knob's colour must not show through.
+        set(s, S::knob, stage, blend_colors(rest(s, S::knob), th.text, kSwitchKnobHoverMix));
       } else if (stage == StyleState::checked) {
         set(s, S::track, stage, th.accent);
         set(s, S::border, stage, kTransparent);

@@ -66,6 +66,15 @@ struct SystemInfo {
   bool reduced_motion = false;
 };
 
+// A window's width or height in device pixels from a logical size: whole, at least 1 and at
+// most kMaxWindowPixels, whatever the caller passed (NaN and infinity included), so it always
+// converts to an integer safely.
+inline constexpr int kMaxWindowPixels = 1 << 15;
+int window_pixels(float logical, float scale);
+// The display scale for a dots-per-inch setting written as text (X11's Xft.dpi): 1 unless it
+// is a whole, finite number inside the range screens have.
+float scale_from_dpi_text(const char* text);
+
 // Implemented by the App: what the backend calls that is not about one window.
 class BackendHost {
  public:

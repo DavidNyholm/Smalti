@@ -122,8 +122,12 @@ class SectionReader {
     }
     SeenKeys seen;
     for (const JsonMember& m : block.members) {
-      if (!seen.first(m, errors_)) continue;
-      if (const std::optional<StyleState> s = find_style_state(m.key)) {
+      const std::optional<StyleState> s = find_style_state(m.key);
+      // Only names the schema knows are remembered: a block of thousands of unknown names
+      // costs one report each, not a comparison with every name before it.
+      const bool known = s || find_property(*schema_, state, m.key);
+      if (known && !seen.first(m, errors_)) continue;
+      if (s) {
         read_state(state, *s, m);
       } else {
         read_property(state, m);
@@ -176,7 +180,6 @@ class SectionReader {
       std::optional<TokenExpr> e = read_token_value(spec, m.value, errors_);
       if (!e) return;
       e->pos = m.value.pos;
-      e->in_file = true;
       pending.expr = *e;
     }
     out_.push_back(std::move(pending));

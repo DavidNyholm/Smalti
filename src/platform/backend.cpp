@@ -1,10 +1,39 @@
 // Chooses the platform backend.
+#include <charconv>
+#include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 #include "platform/platform.hpp"
 
 namespace smalti::platform {
+
+namespace {
+// The dots per inch at a scale of 1, and the range of settings taken as real: a quarter of
+// that to ten times it. Anything else (a typo, "inf") is ignored rather than trusted.
+constexpr float kBaseDpi = 96;
+constexpr float kMinDpi = kBaseDpi / 4, kMaxDpi = kBaseDpi * 10;
+}  // namespace
+
+int window_pixels(float logical, float scale) {
+  const double v = static_cast<double>(logical) * static_cast<double>(scale);
+  if (!(v >= 1)) return 1;  // also NaN
+  if (v >= kMaxWindowPixels) return kMaxWindowPixels;
+  return static_cast<int>(std::lround(v));
+}
+
+float scale_from_dpi_text(const char* text) {
+  if (!text) return 1;
+  const char* end = text + std::strlen(text);
+  while (end > text && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n')) --end;
+  float dpi = 0;
+  const auto [stop, ec] = std::from_chars(text, end, dpi);
+  if (ec != std::errc{} || stop != end || !std::isfinite(dpi) || dpi < kMinDpi || dpi > kMaxDpi) {
+    return 1;
+  }
+  return dpi / kBaseDpi;
+}
 
 std::unique_ptr<PlatformBackend> create_backend(Backend kind,
                                                 [[maybe_unused]] Presentation presentation,

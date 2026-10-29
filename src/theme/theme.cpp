@@ -5,13 +5,12 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <fstream>
 #include <optional>
 #include <string>
-#include <system_error>
 #include <type_traits>
 #include <variant>
 
+#include "platform/read_file.hpp"
 #include "smalti/ref.hpp"
 #include "theme/jsonc.hpp"
 #include "theme/tokens.hpp"
@@ -88,7 +87,6 @@ void read_tokens(const JsonValue& tokens, Document& doc, ThemeErrors& errors) {
     std::optional<TokenExpr> e = read_token_value(kTokens[*i], m.value, errors);
     if (!e) continue;
     e->pos = m.value.pos;
-    e->in_file = true;
     doc.tokens[*i] = *e;
   }
 }
@@ -152,11 +150,15 @@ Document read_document(const JsonValue& root, ThemeErrors& errors) {
 
 const Document& builtin_document(Base base);
 
-// Works out every token's value, following references; reports loops once each.
+// Works out every token's value, following references; reports loops once each. A null
+// expression is a token whose value was wrong (and reported): it fails, and so does whatever
+// refers to it, without more reports. `from_file` marks the file's own expressions, where a
+// loop is reported, rather than the base theme's.
 class Resolver {
  public:
-  Resolver(const std::array<const TokenExpr*, kTokenCount>& exprs, ThemeErrors& errors)
-      : exprs_(exprs), errors_(errors) {}
+  Resolver(const std::array<const TokenExpr*, kTokenCount>& exprs,
+           const std::array<bool, kTokenCount>& from_file, ThemeErrors& errors)
+      : exprs_(exprs), from_file_(from_file), errors_(errors) {}
 
   bool resolve_all() {
     bool ok = true;
@@ -173,6 +175,10 @@ class Resolver {
     if (state_[i] == State::failed) return false;
     if (state_[i] == State::visiting) {
       report_loop(i);
+      return false;
+    }
+    if (!exprs_[i]) {
+      state_[i] = State::failed;
       return false;
     }
     const TokenExpr& e = *exprs_[i];
@@ -201,7 +207,7 @@ class Resolver {
     bool placed = false;
     for (auto it = start; it != stack_.end(); ++it) {
       path += std::string(kTokens[*it].name) + " -> ";
-      if (!placed && exprs_[*it]->in_file) at = exprs_[*it]->pos, placed = true;
+      if (!placed && from_file_[*it]) at = exprs_[*it]->pos, placed = true;
       state_[*it] = State::failed;
     }
     path += kTokens[i].name;
@@ -209,6 +215,7 @@ class Resolver {
   }
 
   const std::array<const TokenExpr*, kTokenCount>& exprs_;
+  const std::array<bool, kTokenCount>& from_file_;
   ThemeErrors& errors_;
   std::array<State, kTokenCount> state_{};
   std::array<TokenValue, kTokenCount> values_{};
@@ -274,11 +281,15 @@ std::string stem(std::string_view source) {
 std::optional<Theme> build(const Document& doc, std::string_view source, ThemeErrors& errors) {
   const Document* base = doc.base == Base::none ? nullptr : &builtin_document(doc.base);
   std::array<const TokenExpr*, kTokenCount> exprs{};
+  std::array<bool, kTokenCount> from_file{};
   std::string missing;
+  // A token the file lists with a wrong value (already reported) stays unresolved rather than
+  // taking the base's value, which could make up a loop the file never wrote.
   for (size_t i = 0; i < kTokenCount; ++i) {
     if (doc.tokens[i]) {
       exprs[i] = &*doc.tokens[i];
-    } else if (base && base->tokens[i]) {
+      from_file[i] = true;
+    } else if (!doc.listed[i] && base && base->tokens[i]) {
       exprs[i] = &*base->tokens[i];
     } else if (!doc.listed[i]) {
       missing += (missing.empty() ? "" : ", ") + std::string(kTokens[i].name);
@@ -288,9 +299,10 @@ std::optional<Theme> build(const Document& doc, std::string_view source, ThemeEr
     errors.add(doc.tokens_pos,
                "\"base\": \"none\" needs every token, and these are not set: " + missing);
   }
-  if (errors.any()) return std::nullopt;
-  Resolver resolver(exprs, errors);
-  if (!resolver.resolve_all()) return std::nullopt;
+  // Resolved even when something is already wrong, so loops are reported with the rest.
+  Resolver resolver(exprs, from_file, errors);
+  const bool resolved = resolver.resolve_all();
+  if (!resolved || errors.any()) return std::nullopt;
   Theme theme;
   for (size_t i = 0; i < kTokenCount; ++i) set_field(theme, kTokens[i].field, resolver.value(i));
   theme.name = doc.name ? *doc.name : stem(source);
@@ -392,26 +404,23 @@ ThemeLoad parse_theme(std::string_view text, std::string_view source) {
 ThemeLoad load_theme(const std::filesystem::path& path) {
   const std::u8string shown8 = path.u8string();
   const std::string shown(shown8.begin(), shown8.end());
-  std::error_code ec;
-  const std::filesystem::file_status status = std::filesystem::status(path, ec);
-  if (status.type() == std::filesystem::file_type::not_found) {
-    return file_error("there is no file " + quote_text(shown));
+  const platform::FileText file = platform::read_small_file(path, detail::kMaxJsonBytes);
+  switch (file.status) {
+    case platform::ReadStatus::ok:
+      return parse_theme(file.text, shown);
+    case platform::ReadStatus::missing:
+      return file_error("there is no file " + quote_text(shown));
+    case platform::ReadStatus::folder:
+      return file_error(quote_text(shown) + " is a folder, not a theme file");
+    case platform::ReadStatus::not_a_file:
+      return file_error(quote_text(shown) + " is not a regular file (a pipe or a device)");
+    case platform::ReadStatus::too_large:
+      return file_error(quote_text(shown) + " is larger than " +
+                        std::to_string(detail::kMaxJsonBytes >> 20) + " MB");
+    case platform::ReadStatus::unreadable:
+      break;
   }
-  if (status.type() == std::filesystem::file_type::directory) {
-    return file_error(quote_text(shown) + " is a folder, not a theme file");
-  }
-  const uintmax_t size = std::filesystem::file_size(path, ec);
-  if (ec) return file_error("cannot read " + quote_text(shown));
-  if (size > detail::kMaxJsonBytes) {
-    return file_error(quote_text(shown) + " is larger than " +
-                      std::to_string(detail::kMaxJsonBytes >> 20) + " MB");
-  }
-  std::string text(static_cast<size_t>(size), '\0');
-  std::ifstream in(path, std::ios::binary);
-  if (!in.read(text.data(), static_cast<std::streamsize>(text.size()))) {
-    return file_error("cannot read " + quote_text(shown));
-  }
-  return parse_theme(text, shown);
+  return file_error("cannot read " + quote_text(shown));
 }
 
 }  // namespace smalti

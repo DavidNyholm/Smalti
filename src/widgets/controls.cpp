@@ -44,9 +44,10 @@ void Button::set_text(std::string text) {
 
 Size Button::measure(Size) {
   const Theme& th = theme();
-  return {detail::measure_text(options_.text, detail::body_text(th, FontWeight::medium)) +
-              2 * kButtonPadding,
-          th.control_height};
+  const TextStyle st = detail::body_text(th, FontWeight::medium);
+  // At least as tall as its text, which a theme's sizes can make taller than size.control.
+  return {detail::measure_text(options_.text, st) + 2 * kButtonPadding,
+          std::max(th.control_height, detail::text_line_height(st))};
 }
 
 void Button::paint(Painter& p) {
