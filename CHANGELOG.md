@@ -2,6 +2,18 @@
 
 Semantic versioning; during 0.x, any version may change the API, and every change that does is listed here.
 
+## Unreleased
+
+Fixes from review round 4, on the released 0.1.0; [How it is checked](docs/How-it-is-checked.md) lists all 17. The ones that show in the API or on screen:
+
+- `testing::Driver` rethrows an exception that a callback threw during the driver call, as `App::run()` would; a test that expects one catches it there.
+- A zero-width border (`stroke_rounded_rect` with width 0) is one device pixel at every scale, as documented; it was two at scale 2.
+- Drawing far outside the window (beyond 2^24 device pixels) is clamped instead of overflowing.
+- On X11, mouse buttons other than the main three are ignored, as on Windows.
+- A group with two radio buttons created selected settles on one when one is clicked or selected.
+- Space or Enter on a button shows the press.
+- The repository now carries its code style: `.clang-format`, `ruff.toml` and `.editorconfig`; the whole tree was reformatted once, with no change to the compiled code.
+
 ## 0.1.0 "First light" (2026-10-29)
 
 The first version: the look, the motion, the basic controls, on Windows and Linux.

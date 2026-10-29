@@ -237,3 +237,18 @@ TEST(review4_space_on_a_button_shows_the_press) {
   d.frame();  // the same moment: the press is at its deepest
   CHECK(d.pixel(x, y) != settled);
 }
+
+TEST(review4_a_span_wider_than_the_grid_does_not_starve_a_stretch_column) {
+  // The header asks for more than the whole grid and covers its only stretch column: no growth
+  // of the fit column can help it, so the field beside the label keeps its share.
+  App app(headless());
+  auto win = app.open_window({"t", {200, 100}});
+  auto grid = win->add<Grid>(
+      GridOptions{.columns = {GridTrack::fit(), GridTrack::stretch()}, .column_spacing = 0});
+  grid->add<Box>(Size{20, 10});
+  auto field = grid->add<Box>(Size{10, 10});
+  auto header = grid->add<Box>(Size{250, 10});
+  header->set_column_span(2);
+  testing::Driver(win).frame();
+  CHECK_NEAR(field->bounds().width, 180.0f, 0.5f);
+}
