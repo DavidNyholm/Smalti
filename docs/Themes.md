@@ -2,7 +2,7 @@
 
 A theme is a text file in JSON with comments. It sets the colours, sizes, fonts and motion that every built-in widget draws with. The three built-in themes are such files ([`themes/dark.jsonc`](../themes/dark.jsonc), `black.jsonc` and `light.jsonc`), compiled into the library. This page describes the whole format, so a person or a language model can write a valid theme from it alone.
 
-> **In `beta`, for 0.2.** Theme files, widget styles included, can be read, checked and applied. Still to come in 0.2: live reload, which restyles a running app when the file is saved.
+> **In `beta`, for 0.2.** Theme files, widget styles and live reload: a theme can be read, checked, applied, and changed while the app runs.
 
 ## A theme in a minute
 
@@ -163,6 +163,21 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 - **Every control:** text `text.primary` where not given above, focus `accent`, disabled at 45%.
 
 In code, the section's rules are `Theme::widget_styles`, a list of `StyleRule` (widget, variant, state, property, value), which a program can also build itself. A rule that names no real widget, variant, state or property is a contract violation when the theme is set.
+
+## Live reload
+
+```cpp
+app.on_theme_error([](std::span<const sm::ThemeError> errors) { /* show them */ });
+app.watch_theme("night.jsonc");  // applies it now, and again on every save
+```
+
+Edit the file, save it, and the running app restyles itself.
+
+- The system reports the change (`ReadDirectoryChangesW` on Windows, `inotify` on Linux), so watching costs nothing while the file stays the same: no thread and no polling. The folder is watched rather than the file, because editors save by writing a new file and renaming it over the old one.
+- One save arrives as several reports, so the theme reloads once, 50 ms after the last of them.
+- A save with errors leaves the last good theme on screen. The errors go to the `on_theme_error` handler, or to stderr when there is none, and the next good save applies. Set the handler first to see the errors of the first load too.
+- One file at a time: a second `watch_theme` replaces the first, and `stop_watching_theme()` ends it. A folder that cannot be watched is reported as an error at line 0.
+- The gallery does this with the file it is given: run `gallery night.jsonc`, then edit and save the file.
 
 ## Errors
 

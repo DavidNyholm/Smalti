@@ -4,12 +4,14 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <string_view>
 
 #include "render/canvas.hpp"
 #include "smalti/app.hpp"
+#include "smalti/callback.hpp"
 #include "smalti/input.hpp"
 #include "smalti/window.hpp"
 
@@ -93,6 +95,12 @@ class PlatformBackend {
   virtual void wake() = 0;  // thread-safe: calls host.on_wake() on the UI thread soon
   virtual int64_t now_ns() const = 0;
   virtual SystemInfo system_info() const = 0;
+  // Calls `changed` on the UI thread, from the loop, whenever `file` changes: the watch joins the
+  // loop's wait (platform/file_watch.hpp), so it costs nothing until something changes. One file
+  // at a time: a new call replaces the last. Throws std::runtime_error, with nothing watched, if
+  // the file's folder cannot be watched.
+  virtual void watch_file(const std::filesystem::path& file, Callback<void()> changed) = 0;
+  virtual void stop_watching_file() = 0;
 };
 
 std::unique_ptr<PlatformBackend> create_backend(Backend kind, Presentation presentation,

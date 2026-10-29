@@ -2,6 +2,7 @@
 #include "smalti/app.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -11,6 +12,9 @@ namespace smalti {
 
 namespace {
 App* g_app = nullptr;
+// A watched theme reloads this long after the last change the system reported: one save
+// arrives as several reports (write, rename, attributes), and should reload once.
+constexpr int64_t kThemeReloadDelayNs = 50'000'000;
 }  // namespace
 
 namespace detail {
@@ -115,14 +119,59 @@ void AppState::after_events() {
 }
 
 int64_t AppState::next_deadline_ns() const {
-  int64_t next = INT64_MAX;
+  int64_t next = theme_reload_at;
   for (const auto& w : windows) next = std::min(next, w->state().next_redraw());
   return next;
 }
 
 void AppState::run_timers(int64_t now_ns) {
+  if (theme_reload_at <= now_ns) {
+    theme_reload_at = INT64_MAX;
+    guarded([&] { reload_theme(); });  // the error handler is the app's code
+  }
   // By index: a redraw cannot open or close windows, but stays safe if one ever does.
   for (size_t i = 0; i < windows.size(); ++i) windows[i]->state().run_redraws(now_ns);
+}
+
+void AppState::watch_theme(const std::filesystem::path& file) {
+  stop_watching_theme();
+  theme_file = file;
+  reload_theme();
+  try {
+    backend->watch_file(file, [this] { theme_reload_at = backend->now_ns() + kThemeReloadDelayNs; });
+  } catch (const std::runtime_error& e) {
+    const ThemeError error{0, 0, e.what()};
+    report_theme_errors({&error, 1});
+  }
+}
+
+void AppState::stop_watching_theme() {
+  backend->stop_watching_file();
+  theme_file.reset();
+  theme_reload_at = INT64_MAX;
+}
+
+void AppState::reload_theme() {
+  if (!theme_file) return;
+  const ThemeLoad r = load_theme(*theme_file);
+  if (r.ok()) {
+    app.set_theme(r.theme);
+  } else {
+    report_theme_errors(r.errors);
+  }
+}
+
+void AppState::report_theme_errors(std::span<const ThemeError> errors) {
+  if (theme_error_handler) {
+    theme_error_handler(errors);
+    return;
+  }
+  const std::u8string file8 = theme_file ? theme_file->u8string() : std::u8string();
+  const std::string file(file8.begin(), file8.end());
+  for (const ThemeError& e : errors) {
+    std::fprintf(stderr, "smalti: theme %s:%d:%d: %s\n", file.c_str(), e.line, e.column,
+                 e.message.c_str());
+  }
 }
 
 }  // namespace detail
@@ -209,6 +258,21 @@ void App::set_theme(const Theme& theme) {
     w->state().native->set_dark_frame(theme.dark);
     w->state().invalidate_layout();
   }
+}
+
+void App::watch_theme(const std::filesystem::path& file) {
+  detail::Registry::instance().check_thread();
+  state_->watch_theme(file);
+}
+
+void App::stop_watching_theme() {
+  detail::Registry::instance().check_thread();
+  state_->stop_watching_theme();
+}
+
+void App::on_theme_error(Callback<void(std::span<const ThemeError>)> handler) {
+  detail::Registry::instance().check_thread();
+  state_->theme_error_handler = std::move(handler);
 }
 
 const Theme& App::theme() const {

@@ -34,7 +34,7 @@ On Linux, the same with `linux`, then `build/linux/gallery`.
 ## Examples
 
 - `hello`: a heading, a label and a button that counts.
-- `gallery`: every v0.1 control, the three themes (switch with the radio buttons at the bottom of the sidebar), a second window, and a custom widget (the sidebar). `gallery night.jsonc` opens it in the theme that file describes, listed after the built-in ones ([Themes](Themes.md)).
+- `gallery`: every v0.1 control, the three themes (switch with the radio buttons at the bottom of the sidebar), a second window, and a custom widget (the sidebar). `gallery night.jsonc` opens it in the theme that file describes, listed after the built-in ones, and restyles it each time the file is saved ([Themes](Themes.md)).
 - `smalti-theme check <file.jsonc>`: reports every error in a theme file, with its line and column.
 
 ## Using smalti in a project

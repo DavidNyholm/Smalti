@@ -15,6 +15,7 @@
 #include <thread>
 #include <vector>
 
+#include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
 #include "platform/win32_gpu.hpp"
 
@@ -236,6 +237,10 @@ class Win32Backend final : public PlatformBackend {
   void wake() override;
   int64_t now_ns() const override { return qpc_ns(); }
   SystemInfo system_info() const override;
+  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+    watched_.start(file, std::move(changed));
+  }
+  void stop_watching_file() override { watched_.stop(); }
 
   void add(Win32Window* w) { windows_.push_back(w); }
   void forget(Win32Window* w) { std::erase(windows_, w); }
@@ -273,6 +278,7 @@ class Win32Backend final : public PlatformBackend {
   std::mutex retry_mutex_;
   bool retry_closed_ = false;
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
+  WatchedFile watched_;           // its event joins the loop's wait
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
   std::exception_ptr error_;
@@ -818,16 +824,22 @@ void Win32Backend::run() {
     owners.clear();
     const int64_t now = now_ns();
     int64_t due = INT64_MAX;
+    // Places kept for the frame timer and the watched file's event.
+    const size_t reserved = watched_.active() ? 2 : 1;
     for (Win32Window* w : windows_) {
       if (!w->waiting_for_gpu()) {
         due = std::min(due, w->next_frame_due());
-      } else if (handles.size() + 1 < kMaxWaitHandles) {  // one place stays for the timer
+      } else if (handles.size() + reserved < kMaxWaitHandles) {
         handles.push_back(w->gpu_waitable());
         owners.push_back(w);
       } else {
         // More windows than the wait can take: poll this one at its refresh rate.
         due = std::min(due, now + w->period_ns());
       }
+    }
+    if (watched_.active()) {
+      handles.push_back(watched_.waitable());
+      owners.push_back(nullptr);
     }
     due = std::min(due, host_.next_deadline_ns());
     DWORD timeout = INFINITE;
@@ -855,6 +867,7 @@ void Win32Backend::run() {
     // keyboard input, so a job that keeps posting would otherwise keep input waiting.
     dispatch_messages(PM_QS_INPUT);
     dispatch_messages(0);
+    watched_.poll();
     run_due_frames();
     host_.after_events();
   }

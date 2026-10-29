@@ -22,6 +22,7 @@
 #include <X11/keysym.h>
 #include <sys/eventfd.h>
 
+#include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
 
 namespace smalti::platform {
@@ -187,6 +188,10 @@ class X11Backend final : public PlatformBackend {
   void wake() override;
   int64_t now_ns() const override { return monotonic_ns(); }
   SystemInfo system_info() const override;
+  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+    watched_.start(file, std::move(changed));
+  }
+  void stop_watching_file() override { watched_.stop(); }
 
   Display* display() const { return display_; }
   Atom atom(const char* name) { return XInternAtom(display_, name, False); }
@@ -201,6 +206,7 @@ class X11Backend final : public PlatformBackend {
   Display* display_;
   BackendHost& host_;
   int wake_fd_ = -1;
+  WatchedFile watched_;  // its descriptor joins the loop's poll
   float scale_ = 1;
   std::vector<X11Window*> windows_;
   std::vector<std::pair<unsigned int, ::Cursor>> cursors_;
@@ -502,14 +508,18 @@ void X11Backend::run() {
     if (due != INT64_MAX)
       timeout_ms = static_cast<int>(std::max<int64_t>(0, (due - now_ns() + 999'999) / 1'000'000));
     XFlush(display_);
-    pollfd fds[2] = {{x_fd, POLLIN, 0}, {wake_fd_, POLLIN, 0}};
-    poll(fds, 2, timeout_ms);
+    // poll() skips a negative descriptor: the third entry is unused without a watched file.
+    pollfd fds[3] = {{x_fd, POLLIN, 0},
+                     {wake_fd_, POLLIN, 0},
+                     {watched_.active() ? watched_.waitable() : -1, POLLIN, 0}};
+    poll(fds, 3, timeout_ms);
     if (fds[1].revents & POLLIN) {
       uint64_t count = 0;
       [[maybe_unused]] const ssize_t got = read(wake_fd_, &count, sizeof count);
       host_.on_wake();
     }
     pump_events();
+    watched_.poll();
     const int64_t now = now_ns();
     host_.run_timers(now);  // first, so a redraw that is due is drawn in this turn
     const size_t n = windows_.size();

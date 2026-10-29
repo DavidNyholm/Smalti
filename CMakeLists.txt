@@ -52,6 +52,14 @@ add_library(smalti STATIC
   "${smalti_generated}/inter_fonts.cpp"
   "${smalti_generated}/builtin_themes.cpp")
 add_library(smalti::smalti ALIAS smalti)
+# Watching a theme file for live reload, through each system's own notifications.
+if(WIN32)
+  target_sources(smalti PRIVATE src/platform/file_watch_win32.cpp)
+elseif(UNIX AND NOT APPLE)
+  target_sources(smalti PRIVATE src/platform/file_watch_linux.cpp)
+else()
+  message(FATAL_ERROR "smalti: no file watcher for this system yet (see docs/Porting-to-a-new-platform.md)")
+endif()
 target_compile_features(smalti PUBLIC cxx_std_20)
 target_include_directories(smalti
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -103,8 +111,15 @@ if(SMALTI_BUILD_EXAMPLES)
     target_link_libraries(${example} PRIVATE smalti::smalti)
     smalti_strict(${example})
     if(MSVC)
-      # WIN32 programs start at WinMain; this lets them keep a portable main().
-      target_link_options(${example} PRIVATE /ENTRY:mainCRTStartup)
+      # WIN32 programs start at WinMain; this lets them keep a portable main(). The gallery
+      # starts at wmain instead, so a theme file's name arrives intact in any language.
+      if(example STREQUAL "gallery")
+        target_link_options(${example} PRIVATE /ENTRY:wmainCRTStartup)
+      else()
+        target_link_options(${example} PRIVATE /ENTRY:mainCRTStartup)
+      endif()
+    elseif(MINGW AND example STREQUAL "gallery")
+      target_link_options(${example} PRIVATE -municode)
     endif()
   endforeach()
   # Renders the documentation screenshots without a screen (see tools/screenshots.py).
@@ -141,6 +156,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review5.cpp
     tests/test_styles.cpp
     tests/test_ref.cpp
+    tests/test_reload.cpp
     tests/test_text.cpp
     tests/test_theme.cpp
     tests/test_timing.cpp

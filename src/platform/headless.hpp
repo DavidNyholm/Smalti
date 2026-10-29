@@ -5,6 +5,7 @@
 #include <atomic>
 #include <vector>
 
+#include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
 
 namespace smalti::platform {
@@ -60,6 +61,13 @@ class HeadlessBackend final : public PlatformBackend {
   void wake() override { woken_ = true; }
   int64_t now_ns() const override { return now_; }
   SystemInfo system_info() const override { return {true, false}; }
+  // A real watch on a real file, read without blocking whenever the fake clock moves or a
+  // test calls poll_file_watch(): tests can save a file and see it reload.
+  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+    watched_.start(file, std::move(changed));
+  }
+  void stop_watching_file() override { watched_.stop(); }
+  void poll_file_watch() { watched_.poll(); }
 
   // Moves the clock forward by `ns`, running every requested frame on the way.
   void advance(int64_t ns);
@@ -70,6 +78,7 @@ class HeadlessBackend final : public PlatformBackend {
   friend class HeadlessWindow;
   BackendHost& host_;
   std::vector<HeadlessWindow*> windows_;
+  WatchedFile watched_;
   int64_t now_ = 0;
   bool quit_ = false;
   std::atomic<bool> woken_{false};

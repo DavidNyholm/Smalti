@@ -98,6 +98,7 @@ void Driver::advance(std::chrono::milliseconds time) {
 
 void Driver::frame() {
   if (!window_) return;
+  backend().poll_file_watch();
   backend().host().run_timers(backend().now_ns());
   native(window_).run_frame(backend().now_ns());
   backend().host().after_events();
@@ -105,6 +106,7 @@ void Driver::frame() {
 }
 
 void Driver::idle() {
+  backend().poll_file_watch();
   backend().host().run_timers(backend().now_ns());
   backend().host().after_events();
   rethrow_failure();

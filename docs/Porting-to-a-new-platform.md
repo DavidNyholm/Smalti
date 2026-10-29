@@ -32,4 +32,4 @@ A platform is two classes in `src/platform/platform.hpp`: `PlatformBackend` (the
 
 ## PlatformBackend
 
-`create_window`, `run` (returns after `quit`), `quit`, `wake`, `now_ns` (a monotonic clock), and `system_info` (dark mode, reduced motion). Register the backend in `src/platform/backend.cpp` and its source file in `CMakeLists.txt`.
+`create_window`, `run` (returns after `quit`), `quit`, `wake`, `now_ns` (a monotonic clock), `system_info` (dark mode, reduced motion), and `watch_file` and `stop_watching_file` for live reload: add the watch's handle or descriptor to the loop's wait, and call the callback when it reports the file (`src/platform/file_watch.hpp` has a class for Windows and Linux). Register the backend in `src/platform/backend.cpp` and its source file in `CMakeLists.txt`.

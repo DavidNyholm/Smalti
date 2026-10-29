@@ -2,7 +2,9 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
+#include <span>
 
 #include "smalti/callback.hpp"
 #include "smalti/ref.hpp"
@@ -59,6 +61,17 @@ class App {
 
   void set_theme(const Theme& theme);
   const Theme& theme() const;
+
+  // Applies a theme file now, and again each time it is saved, with no thread and no polling:
+  // the system reports the change, and the theme reloads 50 ms after the last report, since
+  // one save arrives as several. A file with errors leaves the current theme on screen and
+  // reports them to on_theme_error (to stderr when no handler is set); the next good save
+  // applies. One file at a time: a new call replaces the last.
+  void watch_theme(const std::filesystem::path& file);
+  void stop_watching_theme();
+  // Receives a watched theme file's errors each time it fails to load. Set it before
+  // watch_theme() to see the errors of the first load too.
+  void on_theme_error(Callback<void(std::span<const ThemeError>)> handler);
 
   MemoryStats memory_stats() const;
 

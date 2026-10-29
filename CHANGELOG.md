@@ -11,8 +11,9 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - Changed: a disabled control dims every part of itself. A switch's outline, a radio button's centre, a slider's track and knob outline, and progress bars used to stay at full strength. (The Widgets page said disabled controls draw at 40% opacity; it has always been 45%.)
 - Changed: a secondary button's outline is no longer tinted under the pointer or while pressed; the tint and the press shade are now part of the button's fill.
 - New: timed redraws. `Widget::redraw_at(time)` and `redraw_after(delay)` draw a widget once at a later time, with the loop asleep until then; the porting interface's `BackendHost` gains `next_deadline_ns()` and `run_timers()` for it.
+- New: live reload. `App::watch_theme(file)` applies a theme file and reapplies it 50 ms after each save, through the system's change notifications; `on_theme_error` receives a broken save's errors while the last good theme stays. The porting interface's `PlatformBackend` gains `watch_file` and `stop_watching_file`.
 - New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
-- New: `gallery <file.jsonc>` opens the gallery in a theme file's theme.
+- New: `gallery <file.jsonc>` opens the gallery in a theme file's theme and restyles it on every save.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.
 - Build: `cmake/embed_fonts.cmake` became `cmake/embed_files.cmake`, which embeds the themes too.
 - Fixed: the 0.1.1 release still called itself 0.1.0 in its CMake package, so `find_package(smalti 0.1.1)` refused it (`find_package(smalti 0.1)` was not affected).

@@ -130,6 +130,11 @@ struct AppState final : platform::BackendHost {
   void after_events() override;
   int64_t next_deadline_ns() const override;
   void run_timers(int64_t now_ns) override;
+  // The watched theme file (App::watch_theme).
+  void watch_theme(const std::filesystem::path& file);
+  void stop_watching_theme();
+  void reload_theme();  // applies the file if it is valid, reports its errors if not
+  void report_theme_errors(std::span<const ThemeError> errors);
   // Runs fn, catching anything it throws: the first exception stops the loop and is rethrown
   // from run(). Pending removals are processed once the outermost guarded call returns: a
   // callback that opens a nested event loop (a native message box) must not find its own
@@ -156,6 +161,9 @@ struct AppState final : platform::BackendHost {
   platform::SystemInfo system;
   Theme theme;
   WidgetStyles styles;  // the theme's widget styles, computed whenever the theme is set
+  std::optional<std::filesystem::path> theme_file;  // watched, when set
+  int64_t theme_reload_at = INT64_MAX;              // a change was reported: reload then
+  Callback<void(std::span<const ThemeError>)> theme_error_handler;
   FontSet fonts;
   GlyphCache glyphs;
   std::vector<std::unique_ptr<Window>> windows;
