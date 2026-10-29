@@ -4,14 +4,14 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 98 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 103 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
 - **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
 - **Lifetimes:** dead `Ref`s are reported and never dereferenced, slot reuse does not revive old `Ref`s, widgets remove themselves from their own callbacks, calls from another thread are refused, 2,000 rounds of building and removing controls and 300 windows opened and closed return to the starting widget count.
 - **Layout, widgets and motion:** stacks, grids, every control by mouse and keyboard, focus order, animations that settle and then request no more frames.
 - **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much.
-- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) and `tests/test_review4.cpp` (round 4: 12 tests). See below.
+- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) `tests/test_review4.cpp` (round 4: 12 tests) and `tests/test_review5.cpp` (round 5: 5 tests). See below.
 
 ```bash
 cmake --preset windows
@@ -37,9 +37,9 @@ cmake --build --preset linux-asan
 
 ## Injected bugs
 
-A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty that each undo one of the review fixes below.
+A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-four that each undo one of the review fixes below.
 
-Result on the current sources, MSVC Debug: **62 of 62 caught**, by a failing test or a crashing test binary, none by a time-out.
+Result on the current sources, MSVC Debug: **66 of 66 caught**, by a failing test or a crashing test binary, none by a time-out.
 
 Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
@@ -53,6 +53,8 @@ After round 2, one injected bug (posted work never running) made a new test hang
 
 After round 4, the injected bug that ignores the share a span gives back to stretch columns went unseen: with the new solver it only slows convergence, in every case the tests had. It changes the result for a span wider than the whole grid over its only stretch column, which now has a test.
 
+After round 5, one injected bug (reversed slider bounds reaching `std::clamp`) timed out instead of crashing: MSVC's debug check stopped the test binary in a way that waited instead of exiting. The test runner now has MSVC report such checks on stderr and exit at once.
+
 ```bash
 python tools/mutate.py --preset windows
 python tools/mutate.py --preset windows --only kerning
@@ -62,7 +64,7 @@ The second form runs only the bugs whose description contains the given text. A 
 
 ## Review
 
-Before its release, v0.1 had three rounds of code review, and the released 0.1.0 a fourth, by a second model, **GPT-6-Astra** (model id `gpt-6-astra`, at its highest reasoning effort) through the Codex CLI: read-only passes over the whole source, asked to act as a hostile senior engineer and to state each finding as a concrete failure scenario. Claude checked every finding against the code before fixing it; all of them turned out to be real. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+Before its release, v0.1 had three rounds of code review, and the released 0.1.0 a fourth and a fifth before 0.1.1, by a second model, **GPT-6-Astra** (model id `gpt-6-astra`, at its highest reasoning effort) through the Codex CLI: read-only passes over the whole source, asked to act as a hostile senior engineer and to state each finding as a concrete failure scenario. Claude checked every finding against the code before fixing it; all of them turned out to be real. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
 
 ### Round 1
 
@@ -172,4 +174,23 @@ The fourth round looked first at the round-3 changes, then took a fresh pass ove
 | 17 | Activating a button with Space showed no press. | The press shows, then fades. | Test |
 
 Also checked after round 4: the X11 backend refuses a 16-bit display with its clear message and runs on a 24-bit one (both on Xvfb), and with the round-4 changes `hello` still shows "Clicked 3 times." on the GPU path, idles at 0.0% CPU, and the gallery measured a median of 5.9% of one core.
+
+### Round 5, before 0.1.1
+
+The fifth round concentrated on the round-4 changes. It judged 10 of those 17 fixes complete and 7 incomplete, and reported 11 defects (five major, six minor). Nine are fixed; `tests/test_review5.cpp` has a test for each of the five that can be reproduced without a screen, and each failed first, one only under UBSan.
+
+| # | Defect | Fix | Checked by |
+|---|---|---|---|
+| 1 | On Windows, a wake retry running while the backend shut down could arm its timer again after it was disarmed, and run on freed memory. | Arming and shutting down are serialised under one lock. | By reading |
+| 2 | A circle with a radius of 1e20 overflowed the curve's segment count before it was clamped. | The count is computed in double and clamped before it becomes an int. | Test, under UBSan |
+| 3 | A focus hook that pumped the release of the press that focused it left a ghost press behind. | The press is under way from its first hook; such a release ends it. | Test |
+| 4 | On Windows, a worker thread posting continuously could still keep a native dialog's input waiting, through its own wake messages. | A wake message that arrives while input or painting waits defers to a timer, and other threads' wakes are held back until then. | By reading |
+| 5 | On Windows, a failed `SetTimer` left posted work waiting for some other wake. | It falls back to a posted message. | By reading |
+| 6, 7 | Grid spans that overlap across fit columns can be given a poor split, overflowing the grid or leaving a span short, though a split that fits exists. | **Not fixed in 0.1.1.** It needs the span constraints solved together, which v0.2 does. | Open |
+| 8 | On Windows, running out of memory while starting the GPU thread still leaked the loop's handles. | Any failure to start it keeps the CPU path. | By reading |
+| 9 | `testing::Driver::idle()` still dropped exceptions from cleanup. | It rethrows them like every other driver call. | Test |
+| 10 | Text placed beyond the canvas's working range stopped drawing the rest of its line and reported the wrong end. | Such glyphs are skipped, but the pen still advances. | Test |
+| 11 | A widget's own hover hook that hid it could leave its cursor showing. | The cursor is set only for a widget that still has the hover. | Test |
+
+After round 5, `hello` on the GPU path still shows "Clicked 3 times." and idles at 0.0% CPU, the gallery measured a median of 5.7% of one core, and the X11 checks on Xvfb and WSLg pass as before.
 

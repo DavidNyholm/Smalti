@@ -2,11 +2,11 @@
 
 Semantic versioning; during 0.x, any version may change the API, and every change that does is listed here.
 
-## Unreleased
+## 0.1.1 (2026-10-29)
 
-Fixes from review round 4, on the released 0.1.0; [How it is checked](docs/How-it-is-checked.md) lists all 17. The ones that show in the API or on screen:
+Fixes from review rounds 4 and 5, on the released 0.1.0, among them a memory-safety defect (drawing far outside the window could write outside the frame buffer); [How it is checked](docs/How-it-is-checked.md) lists them all. Two findings about grid spans that overlap across fit columns are left for 0.2. The changes that show in the API or on screen:
 
-- `testing::Driver` rethrows an exception that a callback threw during the driver call, as `App::run()` would; a test that expects one catches it there.
+- `testing::Driver` rethrows an exception that a callback threw during any driver call, `idle()` included, as `App::run()` would; a test that expects one catches it there. `Driver::cursor()` is new: the cursor the window shows.
 - A zero-width border (`stroke_rounded_rect` with width 0) is one device pixel at every scale, as documented; it was two at scale 2.
 - Drawing far outside the window (beyond 2^24 device pixels) is clamped instead of overflowing.
 - On X11, mouse buttons other than the main three are ignored, as on Windows.
