@@ -15,6 +15,8 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
 - New: `gallery <file.jsonc>` opens the gallery in a theme file's theme and restyles it on every save.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.
+- Fixed (review round 6): a theme file must be a regular file (a FIFO could block the loader forever) and is read to its end; X11 ignores an `Xft.dpi` that is not a finite number from 24 to 960 (`inf` reached undefined integer conversions); window sizes from `WindowOptions` are converted safely whatever their value; the canvas clamps colours outside 0 to 1 instead of drawing wrong ones; a lone carriage return ends a line in a theme file.
+- Changed: a button is at least as tall as its text, which a theme's font size can make taller than `size.control`.
 - Build: `cmake/embed_fonts.cmake` became `cmake/embed_files.cmake`, which embeds the themes too.
 - Fixed: the 0.1.1 release still called itself 0.1.0 in its CMake package, so `find_package(smalti 0.1.1)` refused it (`find_package(smalti 0.1)` was not affected).
 

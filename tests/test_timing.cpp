@@ -89,6 +89,7 @@ TEST(timing_a_delay_too_long_for_the_clock_never_comes) {
   auto blinker = win->add<Blinker>();
   blinker->blinking = false;
   testing::Driver d(win);
+  d.advance(100ms);  // past zero, where now + max would overflow into the past
   const int paints = blinker->paints;
   blinker->ask_after(std::chrono::nanoseconds::max());  // saturates instead of overflowing
   blinker->ask_at(INT64_MAX);

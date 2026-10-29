@@ -23,6 +23,9 @@ namespace {
 constexpr auto kReportTimeout = 3s;
 // After the first report, how long to wait for the rest of one save's reports.
 constexpr auto kSettle = 60ms;
+// How long a save must go unreported to count as not watched. A rename is reported within a
+// few milliseconds on both systems.
+constexpr auto kQuietFor = 300ms;
 
 const Color kRed = Color::hex(0xFF0000), kGreen = Color::hex(0x00FF00);
 
@@ -168,14 +171,29 @@ TEST(reload_ignores_other_files_and_stops_when_asked) {
   testing::Driver d(win);
   app.watch_theme(file);
 
-  write(dir.path() / "other.jsonc", accent_theme("#00ff00"));
-  std::this_thread::sleep_for(kSettle * 2);
-  d.idle();
-  CHECK(!reload_pending());
+  // Saved the way editors save, by renaming a new file into place, which every system reports
+  // at once (Windows reports a file rewritten in place only as its cache is written out).
+  const auto save = [&](const fs::path& target, std::string_view text) {
+    const fs::path temp = dir.path() / "save.tmp";
+    write(temp, text);
+    fs::rename(temp, target);
+  };
+  // Nothing is scheduled for a while after a save: no report for the watched file came in.
+  const auto stays_quiet = [&] {
+    for (auto waited = 0ms; waited < kQuietFor; waited += 10ms) {
+      std::this_thread::sleep_for(10ms);
+      d.idle();
+      if (reload_pending()) return false;
+    }
+    return true;
+  };
+
+  save(dir.path() / "other.jsonc", accent_theme("#00ff00"));
+  CHECK(stays_quiet());
 
   app.stop_watching_theme();
-  write(file, accent_theme("#00ff00"));
-  std::this_thread::sleep_for(kSettle * 2);
+  save(file, accent_theme("#00ff00"));
+  CHECK(stays_quiet());  // the folder is no longer watched: nothing even schedules a reload
   d.advance(200ms);
   CHECK(app.theme().accent == kRed);
 }
