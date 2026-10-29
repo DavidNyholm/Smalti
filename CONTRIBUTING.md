@@ -4,7 +4,7 @@ smalti is a personal project, published so that anyone can use it, learn from it
 
 - **Forks are welcome.** MIT means you may take it in any direction, including closed source, as long as the copyright notice stays.
 - **Issues and pull requests are read when there is time.** They may be closed without review, and there is no promise of a reply. The repository may be archived one day; downloads and forks keep working when that happens.
-- **If you do send a change:** keep it to one subject, run the whole check first (below), and say what you ran. A change that adds a dependency will not be accepted (see [Dependencies and supply chain](docs/Dependencies-and-supply-chain.md)).
+- **If you do send a change:** keep it to one subject, format it with the repository's settings ([Style](docs/Forking-and-contributing.md#style)), run the whole check first (below), and say what you ran. A change that adds a dependency will not be accepted (see [Dependencies and supply chain](docs/Dependencies-and-supply-chain.md)).
 
 ## Running the checks
 

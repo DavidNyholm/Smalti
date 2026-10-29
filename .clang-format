@@ -1,0 +1,24 @@
+# smalti's C++ formatting: Google style at 100 columns. Run clang-format on the files you change;
+# docs/Forking-and-contributing.md says how.
+---
+Language: Cpp
+BasedOnStyle: Google
+ColumnLimit: 100
+DerivePointerAlignment: false
+PointerAlignment: Left
+LineEnding: LF
+InsertNewlineAtEOF: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  # C and operating-system headers outside any folder: <windows.h>, <poll.h>
+  - Regex: '^<[A-Za-z0-9_]+\.h>'
+    Priority: 1
+  # C++ standard library: <vector>, <cstdint>
+  - Regex: '^<[a-z0-9_]+>'
+    Priority: 2
+  # Other system headers: <X11/Xlib.h>, <wrl/client.h>
+  - Regex: '^<.*>'
+    Priority: 3
+  # smalti's own headers
+  - Regex: '.*'
+    Priority: 4

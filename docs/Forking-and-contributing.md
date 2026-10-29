@@ -27,4 +27,12 @@ On Linux, the `linux-asan` preset runs the suite under AddressSanitizer and Unde
 
 ## Style
 
-C++20, `snake_case` functions and files, `PascalCase` types, `trailing_` members, `kPascalCase` constants. Comments say why, not what. Zero warnings at `/W4` and `-Wall -Wextra -Wpedantic`.
+One style throughout, set by files in the repository's root, so nobody formats by hand and every change looks like the code around it:
+
+- **C++:** `.clang-format`, Google style at 100 columns. Format the files you change with `clang-format -i <file>`; any clang-format from version 16 on reads the file, and Visual Studio's C++ tools include one.
+- **Python** (the scripts in `tools/`): `ruff.toml`, which `ruff format tools` and `ruff check tools` follow.
+- **Everything else:** `.editorconfig` (UTF-8, LF line endings, two-space indents, four in Python), which most editors follow by themselves.
+- **Names:** `snake_case` functions and files, `PascalCase` types, `trailing_` members, `kPascalCase` constants, `UPPER_CASE` macros (prefixed `SMALTI_`).
+- **The rest:** C++20. Comments say why, not what. Zero warnings at `/W4` and `-Wall -Wextra -Wpedantic`. Sources are plain ASCII; anything else is written as an escape.
+
+The commit that brought the whole tree to this style changed nothing but layout: the library, tests and examples compiled to identical object code before and after, with both compilers. It is listed in `.git-blame-ignore-revs`, so GitHub's blame view looks past it, and so does `git blame` after `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
