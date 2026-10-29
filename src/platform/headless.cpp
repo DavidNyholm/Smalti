@@ -5,7 +5,8 @@
 
 namespace smalti::platform {
 
-HeadlessWindow::HeadlessWindow(HeadlessBackend& backend, const WindowOptions& options, WindowEvents& events)
+HeadlessWindow::HeadlessWindow(HeadlessBackend& backend, const WindowOptions& options,
+                               WindowEvents& events)
     : backend_(backend), events_(events) {
   resize(options.size, 1.0f);
   backend_.windows_.push_back(this);  // last: if anything above throws, the backend never saw us
@@ -30,7 +31,8 @@ bool HeadlessWindow::run_frame(int64_t now_ns) {
   return true;
 }
 
-std::unique_ptr<NativeWindow> HeadlessBackend::create_window(const WindowOptions& options, WindowEvents& events) {
+std::unique_ptr<NativeWindow> HeadlessBackend::create_window(const WindowOptions& options,
+                                                             WindowEvents& events) {
   return std::make_unique<HeadlessWindow>(*this, options, events);
 }
 

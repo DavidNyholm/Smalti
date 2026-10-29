@@ -29,7 +29,8 @@ struct Bitmap {
   int width = 0, height = 0;
   std::vector<uint32_t> pixels;
   Bitmap() = default;
-  Bitmap(int w, int h) : width(w), height(h), pixels(static_cast<size_t>(w) * static_cast<size_t>(h), 0xFF000000u) {}
+  Bitmap(int w, int h)
+      : width(w), height(h), pixels(static_cast<size_t>(w) * static_cast<size_t>(h), 0xFF000000u) {}
   PixelBuffer view() { return {pixels.data(), width, height, width}; }
 };
 

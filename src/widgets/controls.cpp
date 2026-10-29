@@ -16,7 +16,9 @@ constexpr float kOutlineWidth = 1.5f;
 constexpr float kTrackWidth = 36, kTrackHeight = 20, kKnobRadius = 7;
 constexpr float kRadioRadius = 9, kRadioDot = 4.5f;
 
-bool activates(const KeyEvent& e) { return e.down && !e.repeat && (e.key == Key::space || e.key == Key::enter); }
+bool activates(const KeyEvent& e) {
+  return e.down && !e.repeat && (e.key == Key::space || e.key == Key::enter);
+}
 
 bool primary_press(const MouseEvent& e) {
   return e.kind == MouseEvent::Kind::press && e.button == MouseButton::left;
@@ -44,7 +46,8 @@ void Button::set_text(std::string text) {
 
 Size Button::measure(Size) {
   const Theme& th = theme();
-  return {detail::measure_text(options_.text, detail::body_text(th, FontWeight::medium)) + 2 * kButtonPadding,
+  return {detail::measure_text(options_.text, detail::body_text(th, FontWeight::medium)) +
+              2 * kButtonPadding,
           th.control_height};
 }
 
@@ -71,14 +74,17 @@ void Button::paint(Painter& p) {
       break;
   }
   if (fill.a > 0) p.fill_rounded_rect(r, th.radius_control, detail::dim_if(off, fill));
-  if (options_.variant == ButtonVariant::secondary) p.stroke_rounded_rect(r, th.radius_control, 0, th.border);
-  if (options_.variant != ButtonVariant::primary && options_.variant != ButtonVariant::danger && hover > 0) {
+  if (options_.variant == ButtonVariant::secondary)
+    p.stroke_rounded_rect(r, th.radius_control, 0, th.border);
+  if (options_.variant != ButtonVariant::primary && options_.variant != ButtonVariant::danger &&
+      hover > 0) {
     p.fill_rounded_rect(r, th.radius_control, th.hover.with_alpha(th.hover.a * hover * 1.5f));
   }
   if (press > 0) p.fill_rounded_rect(r, th.radius_control, Color{0, 0, 0, kPressDarken * press});
   const TextStyle st = detail::body_text(th, FontWeight::medium);
   const float w = p.text_width(options_.text, st);
-  p.text({r.x + (r.width - w) * 0.5f, detail::centered_baseline(r, st)}, options_.text, st, detail::dim_if(off, fg));
+  p.text({r.x + (r.width - w) * 0.5f, detail::centered_baseline(r, st)}, options_.text, st,
+         detail::dim_if(off, fg));
   if (focus_visible()) detail::focus_ring(p, r, th.radius_control, th);
 }
 
@@ -114,7 +120,9 @@ bool Button::on_key(const KeyEvent& e) {
   return true;
 }
 
-void Button::on_hover_changed(bool hovered) { animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast); }
+void Button::on_hover_changed(bool hovered) {
+  animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast);
+}
 
 void Button::on_focus_changed(bool) { invalidate(); }
 
@@ -143,7 +151,8 @@ void CheckBox::toggle() {
 
 Size CheckBox::measure(Size) {
   const Theme& th = theme();
-  const float text = text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
+  const float text =
+      text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
   return {kBoxSize + text, std::max(kBoxSize, detail::text_line_height(detail::body_text(th)))};
 }
 
@@ -156,18 +165,21 @@ void CheckBox::paint(Painter& p) {
   p.fill_rounded_rect(box, kBoxRadius, detail::dim_if(off, Color::mix(th.raised, th.accent, t)));
   if (t < 1) {
     const Color edge = Color::mix(th.text_muted, th.text_secondary, hover);
-    p.stroke_rounded_rect(box, kBoxRadius, kOutlineWidth, detail::dim_if(off, edge.with_alpha(edge.a * (1 - t))));
+    p.stroke_rounded_rect(box, kBoxRadius, kOutlineWidth,
+                          detail::dim_if(off, edge.with_alpha(edge.a * (1 - t))));
   }
   if (t > 0) {
     // The check mark draws in as the box fills: its second stroke grows with t.
-    const Point a{box.x + 4.5f, box.y + 9.5f}, b{box.x + 7.5f, box.y + 12.5f}, c{box.x + 13.5f, box.y + 6.0f};
+    const Point a{box.x + 4.5f, box.y + 9.5f}, b{box.x + 7.5f, box.y + 12.5f},
+        c{box.x + 13.5f, box.y + 6.0f};
     const Point tip{b.x + (c.x - b.x) * t, b.y + (c.y - b.y) * t};
     const Point mark[] = {a, b, tip};
     p.polyline(mark, 2.0f, detail::dim_if(off, th.on_accent.with_alpha(t)));
   }
   if (!text_.empty()) {
     const TextStyle st = detail::body_text(th);
-    p.text({box.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st, detail::dim_if(off, th.text));
+    p.text({box.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st,
+           detail::dim_if(off, th.text));
   }
   if (focus_visible()) detail::focus_ring(p, box, kBoxRadius, th);
 }
@@ -187,7 +199,9 @@ bool CheckBox::on_key(const KeyEvent& e) {
   return true;
 }
 
-void CheckBox::on_hover_changed(bool hovered) { animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast); }
+void CheckBox::on_hover_changed(bool hovered) {
+  animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast);
+}
 
 // --- Switch -------------------------------------------------------------------------------
 
@@ -213,8 +227,10 @@ void Switch::toggle() {
 
 Size Switch::measure(Size) {
   const Theme& th = theme();
-  const float text = text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
-  return {kTrackWidth + text, std::max(kTrackHeight, detail::text_line_height(detail::body_text(th)))};
+  const float text =
+      text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
+  return {kTrackWidth + text,
+          std::max(kTrackHeight, detail::text_line_height(detail::body_text(th)))};
 }
 
 void Switch::paint(Painter& p) {
@@ -228,11 +244,13 @@ void Switch::paint(Painter& p) {
   if (t < 1) p.stroke_rounded_rect(track, radius, 0, th.border.with_alpha(th.border.a * (1 - t)));
   const float travel = kTrackWidth - 2 * radius;
   const Point knob{track.x + radius + travel * t, track.y + radius};
-  const Color knob_color = Color::mix(Color::mix(th.text_secondary, th.text, hover * 0.5f), th.on_accent, t);
+  const Color knob_color =
+      Color::mix(Color::mix(th.text_secondary, th.text, hover * 0.5f), th.on_accent, t);
   p.fill_circle(knob, kKnobRadius, detail::dim_if(off, knob_color));
   if (!text_.empty()) {
     const TextStyle st = detail::body_text(th);
-    p.text({track.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st, detail::dim_if(off, th.text));
+    p.text({track.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st,
+           detail::dim_if(off, th.text));
   }
   if (focus_visible()) detail::focus_ring(p, track, radius, th);
 }
@@ -252,11 +270,14 @@ bool Switch::on_key(const KeyEvent& e) {
   return true;
 }
 
-void Switch::on_hover_changed(bool hovered) { animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast); }
+void Switch::on_hover_changed(bool hovered) {
+  animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast);
+}
 
 // --- RadioButton --------------------------------------------------------------------------
 
-RadioButton::RadioButton(std::string text, bool selected) : text_(std::move(text)), selected_(selected) {
+RadioButton::RadioButton(std::string text, bool selected)
+    : text_(std::move(text)), selected_(selected) {
   dot_.to = selected ? 1.0f : 0.0f;
 }
 
@@ -278,7 +299,8 @@ void RadioButton::set_selected(bool selected, bool notify) {
   // The rest of the group lets go.
   if (Widget* group = parent().try_get()) {
     for (auto& sibling : group->children()) {
-      if (auto* radio = dynamic_cast<RadioButton*>(sibling.get()); radio && radio != this) radio->set_selected(false, false);
+      if (auto* radio = dynamic_cast<RadioButton*>(sibling.get()); radio && radio != this)
+        radio->set_selected(false, false);
     }
   }
   if (notify && on_select_) on_select_();
@@ -301,7 +323,8 @@ void RadioButton::move_selection(int step) {
   if (!parent) return;
   std::vector<RadioButton*> group;
   for (auto& sibling : parent->children()) {
-    if (auto* radio = dynamic_cast<RadioButton*>(sibling.get()); radio && radio->visible() && radio->enabled()) {
+    if (auto* radio = dynamic_cast<RadioButton*>(sibling.get());
+        radio && radio->visible() && radio->enabled()) {
       group.push_back(radio);
     }
   }
@@ -315,8 +338,10 @@ void RadioButton::move_selection(int step) {
 
 Size RadioButton::measure(Size) {
   const Theme& th = theme();
-  const float text = text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
-  return {2 * kRadioRadius + text, std::max(2 * kRadioRadius, detail::text_line_height(detail::body_text(th)))};
+  const float text =
+      text_.empty() ? 0 : detail::kLabelGap + detail::measure_text(text_, detail::body_text(th));
+  return {2 * kRadioRadius + text,
+          std::max(2 * kRadioRadius, detail::text_line_height(detail::body_text(th)))};
 }
 
 void RadioButton::paint(Painter& p) {
@@ -331,11 +356,13 @@ void RadioButton::paint(Painter& p) {
   if (t > 0) p.fill_circle(c, kRadioDot * t, detail::dim_if(off, th.accent));
   if (!text_.empty()) {
     const TextStyle st = detail::body_text(th);
-    p.text({r.x + 2 * kRadioRadius + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st,
-           detail::dim_if(off, th.text));
+    p.text({r.x + 2 * kRadioRadius + detail::kLabelGap, detail::centered_baseline(r, st)}, text_,
+           st, detail::dim_if(off, th.text));
   }
   if (focus_visible()) {
-    detail::focus_ring(p, {c.x - kRadioRadius, c.y - kRadioRadius, 2 * kRadioRadius, 2 * kRadioRadius}, kRadioRadius, th);
+    detail::focus_ring(p,
+                       {c.x - kRadioRadius, c.y - kRadioRadius, 2 * kRadioRadius, 2 * kRadioRadius},
+                       kRadioRadius, th);
   }
 }
 
@@ -351,15 +378,24 @@ bool RadioButton::on_mouse(const MouseEvent& e) {
 bool RadioButton::on_key(const KeyEvent& e) {
   if (!e.down) return false;
   switch (e.key) {
-    case Key::space: select(); return true;
+    case Key::space:
+      select();
+      return true;
     case Key::right:
-    case Key::down: move_selection(1); return true;
+    case Key::down:
+      move_selection(1);
+      return true;
     case Key::left:
-    case Key::up: move_selection(-1); return true;
-    default: return false;
+    case Key::up:
+      move_selection(-1);
+      return true;
+    default:
+      return false;
   }
 }
 
-void RadioButton::on_hover_changed(bool hovered) { animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast); }
+void RadioButton::on_hover_changed(bool hovered) {
+  animate(hover_, hovered ? 1.0f : 0.0f, theme().motion_fast);
+}
 
 }  // namespace smalti

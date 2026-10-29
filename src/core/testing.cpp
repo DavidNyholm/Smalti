@@ -12,13 +12,15 @@ namespace {
 
 platform::HeadlessWindow& native(Ref<Window> w) {
   auto* hw = dynamic_cast<platform::HeadlessWindow*>(w->state().native.get());
-  if (!hw) detail::contract_violation("testing::Driver needs an App created with Backend::headless");
+  if (!hw)
+    detail::contract_violation("testing::Driver needs an App created with Backend::headless");
   return *hw;
 }
 
 platform::HeadlessBackend& backend() {
   auto* hb = dynamic_cast<platform::HeadlessBackend*>(detail::app_state().backend.get());
-  if (!hb) detail::contract_violation("testing::Driver needs an App created with Backend::headless");
+  if (!hb)
+    detail::contract_violation("testing::Driver needs an App created with Backend::headless");
   return *hb;
 }
 

@@ -21,9 +21,12 @@ struct Axis {
   bool vertical;
   float main(Size s) const { return vertical ? s.height : s.width; }
   float cross(Size s) const { return vertical ? s.width : s.height; }
-  Size make(float main_v, float cross_v) const { return vertical ? Size{cross_v, main_v} : Size{main_v, cross_v}; }
+  Size make(float main_v, float cross_v) const {
+    return vertical ? Size{cross_v, main_v} : Size{main_v, cross_v};
+  }
   Rect rect(float main_pos, float cross_pos, float main_len, float cross_len) const {
-    return vertical ? Rect{cross_pos, main_pos, cross_len, main_len} : Rect{main_pos, cross_pos, main_len, cross_len};
+    return vertical ? Rect{cross_pos, main_pos, cross_len, main_len}
+                    : Rect{main_pos, cross_pos, main_len, cross_len};
   }
 };
 
@@ -39,14 +42,16 @@ Size measure_stack(Widget& self, const StackOptions& o, Size available, Axis axi
   for (size_t i = 0; i < self.children().size(); ++i) {
     Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
-    const Size s = max_size(child->measure(axis.make(kUnbounded, axis.cross(inner))), child->min_size());
+    const Size s =
+        max_size(child->measure(axis.make(kUnbounded, axis.cross(inner))), child->min_size());
     main_total += axis.main(s);
     cross_max = std::max(cross_max, axis.cross(s));
     ++count;
   }
   if (count > 1) main_total += o.spacing * static_cast<float>(count - 1);
   const Size content = axis.make(main_total, cross_max);
-  return max_size({content.width + o.padding.horizontal(), content.height + o.padding.vertical()}, self.min_size());
+  return max_size({content.width + o.padding.horizontal(), content.height + o.padding.vertical()},
+                  self.min_size());
 }
 
 void arrange_stack(Widget& self, const StackOptions& o, Rect bounds, Axis axis) {
@@ -61,7 +66,8 @@ void arrange_stack(Widget& self, const StackOptions& o, Rect bounds, Axis axis) 
   for (size_t i = 0; i < self.children().size(); ++i) {
     Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
-    used += axis.main(max_size(child->measure(axis.make(kUnbounded, inner_cross)), child->min_size()));
+    used +=
+        axis.main(max_size(child->measure(axis.make(kUnbounded, inner_cross)), child->min_size()));
     total_stretch += child->stretch();
     ++count;
   }
@@ -69,22 +75,32 @@ void arrange_stack(Widget& self, const StackOptions& o, Rect bounds, Axis axis) 
   const float extra = std::max(0.0f, inner_main - used);
   float pos = main_start;
   if (total_stretch == 0) {
-    if (o.justify == Align::center) pos += extra * 0.5f;
-    else if (o.justify == Align::end) pos += extra;
+    if (o.justify == Align::center)
+      pos += extra * 0.5f;
+    else if (o.justify == Align::end)
+      pos += extra;
   }
   for (size_t i = 0; i < self.children().size(); ++i) {
     Widget* child = self.children()[i].get();
     if (!child->visible()) continue;
     const Size s = max_size(child->measure(axis.make(kUnbounded, inner_cross)), child->min_size());
     float main_len = axis.main(s);
-    if (total_stretch > 0 && child->stretch() > 0) main_len += extra * child->stretch() / total_stretch;
+    if (total_stretch > 0 && child->stretch() > 0)
+      main_len += extra * child->stretch() / total_stretch;
     float cross_len = std::min(axis.cross(s), inner_cross);
     float cross_pos = cross_start;
     switch (child->align_or(o.align)) {
-      case Align::stretch: cross_len = inner_cross; break;
-      case Align::center: cross_pos += (inner_cross - cross_len) * 0.5f; break;
-      case Align::end: cross_pos += inner_cross - cross_len; break;
-      case Align::start: break;
+      case Align::stretch:
+        cross_len = inner_cross;
+        break;
+      case Align::center:
+        cross_pos += (inner_cross - cross_len) * 0.5f;
+        break;
+      case Align::end:
+        cross_pos += inner_cross - cross_len;
+        break;
+      case Align::start:
+        break;
     }
     child->arrange(axis.rect(pos, cross_pos, main_len, cross_len));
     pos += main_len + o.spacing;
@@ -152,7 +168,8 @@ std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float wid
     if (cell.span != 1) continue;
     const size_t c = static_cast<size_t>(cell.column);
     if (content_sized(c)) {
-      const Size s = max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size());
+      const Size s =
+          max_size(cell.widget->measure({kUnbounded, kUnbounded}), cell.widget->min_size());
       widths[c] = std::max(widths[c], s.width);
     }
   }
@@ -234,10 +251,12 @@ Size Grid::measure(Size available) {
     }
     float w = options_.column_spacing * static_cast<float>(cell.span - 1);
     for (int c = cell.column; c < cell.column + cell.span; ++c) w += widths[static_cast<size_t>(c)];
-    row_h = std::max(row_h, max_size(cell.widget->measure({w, kUnbounded}), cell.widget->min_size()).height);
+    row_h = std::max(
+        row_h, max_size(cell.widget->measure({w, kUnbounded}), cell.widget->min_size()).height);
   }
   total_h += row_h;
-  return max_size({total_w + options_.padding.horizontal(), total_h + options_.padding.vertical()}, min_size());
+  return max_size({total_w + options_.padding.horizontal(), total_h + options_.padding.vertical()},
+                  min_size());
 }
 
 void Grid::arrange(Rect bounds) {
@@ -246,18 +265,22 @@ void Grid::arrange(Rect bounds) {
   const std::vector<Cell> cells = place();
   const std::vector<float> widths = column_widths(cells, inner.width);
   std::vector<float> lefts(widths.size(), inner.x);
-  for (size_t c = 1; c < widths.size(); ++c) lefts[c] = lefts[c - 1] + widths[c - 1] + options_.column_spacing;
+  for (size_t c = 1; c < widths.size(); ++c)
+    lefts[c] = lefts[c - 1] + widths[c - 1] + options_.column_spacing;
   // Row heights first, so a row's cells can align within it.
   std::vector<float> heights;
   for (const Cell& cell : cells) {
-    if (static_cast<size_t>(cell.row) >= heights.size()) heights.resize(static_cast<size_t>(cell.row) + 1, 0.0f);
+    if (static_cast<size_t>(cell.row) >= heights.size())
+      heights.resize(static_cast<size_t>(cell.row) + 1, 0.0f);
     float w = options_.column_spacing * static_cast<float>(cell.span - 1);
     for (int c = cell.column; c < cell.column + cell.span; ++c) w += widths[static_cast<size_t>(c)];
-    heights[static_cast<size_t>(cell.row)] = std::max(
-        heights[static_cast<size_t>(cell.row)], max_size(cell.widget->measure({w, kUnbounded}), cell.widget->min_size()).height);
+    heights[static_cast<size_t>(cell.row)] =
+        std::max(heights[static_cast<size_t>(cell.row)],
+                 max_size(cell.widget->measure({w, kUnbounded}), cell.widget->min_size()).height);
   }
   std::vector<float> tops(heights.size(), inner.y);
-  for (size_t r = 1; r < heights.size(); ++r) tops[r] = tops[r - 1] + heights[r - 1] + options_.row_spacing;
+  for (size_t r = 1; r < heights.size(); ++r)
+    tops[r] = tops[r - 1] + heights[r - 1] + options_.row_spacing;
   for (const Cell& cell : cells) {
     float w = options_.column_spacing * static_cast<float>(cell.span - 1);
     for (int c = cell.column; c < cell.column + cell.span; ++c) w += widths[static_cast<size_t>(c)];
@@ -266,10 +289,17 @@ void Grid::arrange(Rect bounds) {
     // Within a row, cells sit centred vertically unless told otherwise; across, they fill.
     float y = tops[static_cast<size_t>(cell.row)], h = std::min(s.height, row_h);
     switch (cell.widget->align_or(Align::center)) {
-      case Align::stretch: h = row_h; break;
-      case Align::center: y += (row_h - h) * 0.5f; break;
-      case Align::end: y += row_h - h; break;
-      case Align::start: break;
+      case Align::stretch:
+        h = row_h;
+        break;
+      case Align::center:
+        y += (row_h - h) * 0.5f;
+        break;
+      case Align::end:
+        y += row_h - h;
+        break;
+      case Align::start:
+        break;
     }
     cell.widget->arrange({lefts[static_cast<size_t>(cell.column)], y, w, h});
   }
@@ -286,11 +316,15 @@ void Card::paint(Painter& p) {
   const Rect r = bounds();
   const float radius = th.radius_card;
   if (th.shadows) {
-    p.shadow({r.x, r.y + kCardShadowOffset, r.width, r.height}, radius, kCardShadowBlur, th.shadow, r);
-    p.shadow({r.x, r.y + 1, r.width, r.height}, radius, kCardContactBlur, th.shadow.with_alpha(th.shadow.a * 0.5f), r);
+    p.shadow({r.x, r.y + kCardShadowOffset, r.width, r.height}, radius, kCardShadowBlur, th.shadow,
+             r);
+    p.shadow({r.x, r.y + 1, r.width, r.height}, radius, kCardContactBlur,
+             th.shadow.with_alpha(th.shadow.a * 0.5f), r);
   }
   p.fill_rounded_rect(r, radius, th.raised);
-  if (!th.shadows) p.fill_rect({r.x + radius, r.y + p.hairline(), r.width - 2 * radius, p.hairline()}, th.top_highlight);
+  if (!th.shadows)
+    p.fill_rect({r.x + radius, r.y + p.hairline(), r.width - 2 * radius, p.hairline()},
+                th.top_highlight);
   p.stroke_rounded_rect(r, radius, 0, th.border);
 }
 

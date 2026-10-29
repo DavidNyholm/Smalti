@@ -49,7 +49,9 @@ constexpr float kF2Dot14 = 1.0f / 16384.0f;
 constexpr size_t kOs2V2Size = 96;  // sxHeight and sCapHeight exist from OS/2 version 2 on
 constexpr int kMinUnitsPerEm = 16;
 
-int value_record_size(uint16_t format) { return 2 * std::popcount(static_cast<unsigned>(format & 0xFF)); }
+int value_record_size(uint16_t format) {
+  return 2 * std::popcount(static_cast<unsigned>(format & 0xFF));
+}
 
 // Offset of XAdvance inside a value record, or -1 if the record has none.
 int x_advance_offset(uint16_t format) {
@@ -66,16 +68,21 @@ int coverage_index(Bytes cov, uint16_t glyph) {
       const int mid = (lo + hi) / 2;
       const uint16_t g = cov.u16(4 + 2 * static_cast<size_t>(mid));
       if (g == glyph) return mid;
-      if (g < glyph) lo = mid + 1;
-      else hi = mid - 1;
+      if (g < glyph)
+        lo = mid + 1;
+      else
+        hi = mid - 1;
     }
   } else if (format == 2) {
     while (lo <= hi) {
       const int mid = (lo + hi) / 2;
       const size_t rec = 4 + 6 * static_cast<size_t>(mid);
-      if (glyph < cov.u16(rec)) hi = mid - 1;
-      else if (glyph > cov.u16(rec + 2)) lo = mid + 1;
-      else return cov.u16(rec + 4) + (glyph - cov.u16(rec));
+      if (glyph < cov.u16(rec))
+        hi = mid - 1;
+      else if (glyph > cov.u16(rec + 2))
+        lo = mid + 1;
+      else
+        return cov.u16(rec + 4) + (glyph - cov.u16(rec));
     }
   }
   return -1;
@@ -86,7 +93,8 @@ uint16_t class_of(Bytes def, uint16_t glyph) {
   const uint16_t format = def.u16(0);
   if (format == 1) {
     const uint16_t start = def.u16(2), count = def.u16(4);
-    if (glyph >= start && glyph < start + count) return def.u16(6 + 2 * static_cast<size_t>(glyph - start));
+    if (glyph >= start && glyph < start + count)
+      return def.u16(6 + 2 * static_cast<size_t>(glyph - start));
     return 0;
   }
   if (format == 2) {
@@ -94,9 +102,12 @@ uint16_t class_of(Bytes def, uint16_t glyph) {
     while (lo <= hi) {
       const int mid = (lo + hi) / 2;
       const size_t rec = 4 + 6 * static_cast<size_t>(mid);
-      if (glyph < def.u16(rec)) hi = mid - 1;
-      else if (glyph > def.u16(rec + 2)) lo = mid + 1;
-      else return def.u16(rec + 4);
+      if (glyph < def.u16(rec))
+        hi = mid - 1;
+      else if (glyph > def.u16(rec + 2))
+        lo = mid + 1;
+      else
+        return def.u16(rec + 4);
     }
   }
   return 0;
@@ -116,8 +127,8 @@ uint16_t Bytes::u16(size_t off) const {
 
 uint32_t Bytes::u32(size_t off) const {
   check(off, 4);
-  return uint32_t{data_[off]} << 24 | uint32_t{data_[off + 1]} << 16 | uint32_t{data_[off + 2]} << 8 |
-         uint32_t{data_[off + 3]};
+  return uint32_t{data_[off]} << 24 | uint32_t{data_[off + 1]} << 16 |
+         uint32_t{data_[off + 2]} << 8 | uint32_t{data_[off + 3]};
 }
 
 Bytes Bytes::sub(size_t off, size_t len) const {
@@ -131,7 +142,8 @@ Bytes Bytes::from(size_t off) const {
 }
 
 void Bytes::check(size_t off, size_t len) const {
-  if (off > data_.size() || len > data_.size() - off) throw FontError("font data is truncated or damaged");
+  if (off > data_.size() || len > data_.size() - off)
+    throw FontError("font data is truncated or damaged");
 }
 
 Font::Font(std::span<const uint8_t> data) : bytes_(data) { parse(); }
@@ -230,8 +242,10 @@ uint16_t Font::glyph_index(char32_t cp) const {
         const size_t group = 16 + 12 * size_t{mid};
         if (cp < sub.u32(group))
           hi = mid;
-        else if (cp > sub.u32(group + 4)) lo = mid + 1;
-        else return static_cast<uint16_t>(sub.u32(group + 8) + (cp - sub.u32(group)));
+        else if (cp > sub.u32(group + 4))
+          lo = mid + 1;
+        else
+          return static_cast<uint16_t>(sub.u32(group + 8) + (cp - sub.u32(group)));
       }
       return 0;
     }
@@ -243,8 +257,10 @@ uint16_t Font::glyph_index(char32_t cp) const {
     int lo = 0, hi = seg_count - 1;
     while (lo < hi) {  // the first segment whose end code is >= cp
       const int mid = (lo + hi) / 2;
-      if (sub.u16(ends + 2 * static_cast<size_t>(mid)) < cp) lo = mid + 1;
-      else hi = mid;
+      if (sub.u16(ends + 2 * static_cast<size_t>(mid)) < cp)
+        lo = mid + 1;
+      else
+        hi = mid;
     }
     const size_t seg = static_cast<size_t>(lo);
     if (sub.u16(starts + 2 * seg) > cp || sub.u16(ends + 2 * seg) < cp) return 0;
@@ -346,8 +362,10 @@ int Font::pair_adjustment(uint32_t subtable, uint16_t left, uint16_t right, bool
         applied = true;
         return x_adv < 0 ? 0 : set.i16(rec + 2 + static_cast<size_t>(x_adv));
       }
-      if (second < right) lo = mid + 1;
-      else hi = mid - 1;
+      if (second < right)
+        lo = mid + 1;
+      else
+        hi = mid - 1;
     }
     return 0;
   }
@@ -402,8 +420,10 @@ void Font::append_outline(Path& path, uint16_t glyph, const Transform& t, int de
   if (depth > kMaxCompositeDepth) throw FontError("composite glyphs nest too deep");
   if (--budget.components < 0) throw FontError("glyph has too many components");
   const Bytes loca = bytes_.from(loca_offset_);
-  const uint32_t start = long_loca_ ? loca.u32(4 * size_t{glyph}) : 2u * loca.u16(2 * size_t{glyph});
-  const uint32_t end = long_loca_ ? loca.u32(4 * size_t{glyph} + 4) : 2u * loca.u16(2 * size_t{glyph} + 2);
+  const uint32_t start =
+      long_loca_ ? loca.u32(4 * size_t{glyph}) : 2u * loca.u16(2 * size_t{glyph});
+  const uint32_t end =
+      long_loca_ ? loca.u32(4 * size_t{glyph} + 4) : 2u * loca.u16(2 * size_t{glyph} + 2);
   if (end <= start) return;  // an empty glyph, such as a space
   const Bytes g = bytes_.from(glyf_offset_).sub(start, end - start);
   const int16_t contours = g.i16(0);
@@ -474,7 +494,8 @@ void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t,
 
     size_t s = 0;
     while (s < n && !on(s)) ++s;
-    const Point start = s < n ? at(s) : mid(at(0), at(1));  // all off-curve: start between the first two
+    const Point start =
+        s < n ? at(s) : mid(at(0), at(1));  // all off-curve: start between the first two
     if (s == n) s = 0;
     path.move_to(start);
     Point ctrl{};
@@ -483,8 +504,10 @@ void Font::append_simple(Path& path, Bytes g, int contours, const Transform& t,
       const size_t idx = s + k;
       const Point p = at(idx);
       if (on(idx)) {
-        if (have_ctrl) path.quad_to(ctrl, p);
-        else path.line_to(p);
+        if (have_ctrl)
+          path.quad_to(ctrl, p);
+        else
+          path.line_to(p);
         have_ctrl = false;
       } else {
         if (have_ctrl) path.quad_to(ctrl, mid(ctrl, p));

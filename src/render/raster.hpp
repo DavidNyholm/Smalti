@@ -34,7 +34,7 @@ class Rasterizer {
 
   RectI area_;
   int stride_ = 0;
-  std::vector<float> acc_;        // signed area per cell; a running sum gives coverage
+  std::vector<float> acc_;  // signed area per cell; a running sum gives coverage
   std::vector<uint8_t> coverage_;
 };
 

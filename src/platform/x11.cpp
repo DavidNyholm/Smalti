@@ -34,9 +34,9 @@ constexpr float kWheelNotchPixels = 120.0f;  // one wheel notch, in logical pixe
 constexpr unsigned long kDoubleClickMs = 400;
 constexpr int kDoubleClickSlop = 4;  // pixels the pointer may move between the two clicks
 constexpr int kBitsPerPixel = 32;
-constexpr long kEventMask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask |
-                            PointerMotionMask | EnterWindowMask | LeaveWindowMask | StructureNotifyMask |
-                            FocusChangeMask;
+constexpr long kEventMask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
+                            ButtonReleaseMask | PointerMotionMask | EnterWindowMask |
+                            LeaveWindowMask | StructureNotifyMask | FocusChangeMask;
 
 int64_t monotonic_ns() {
   timespec ts{};
@@ -63,42 +63,67 @@ float display_scale(Display* d) {
 }
 
 Modifiers modifiers_of(unsigned int state) {
-  return {(state & ShiftMask) != 0, (state & ControlMask) != 0, (state & Mod1Mask) != 0, (state & Mod4Mask) != 0};
+  return {(state & ShiftMask) != 0, (state & ControlMask) != 0, (state & Mod1Mask) != 0,
+          (state & Mod4Mask) != 0};
 }
 
 Key map_keysym(KeySym k) {
-  if (k >= XK_a && k <= XK_z) return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(k - XK_a));
-  if (k >= XK_A && k <= XK_Z) return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(k - XK_A));
-  if (k >= XK_0 && k <= XK_9) return static_cast<Key>(static_cast<int>(Key::digit0) + static_cast<int>(k - XK_0));
-  if (k >= XK_F1 && k <= XK_F12) return static_cast<Key>(static_cast<int>(Key::f1) + static_cast<int>(k - XK_F1));
+  if (k >= XK_a && k <= XK_z)
+    return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(k - XK_a));
+  if (k >= XK_A && k <= XK_Z)
+    return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(k - XK_A));
+  if (k >= XK_0 && k <= XK_9)
+    return static_cast<Key>(static_cast<int>(Key::digit0) + static_cast<int>(k - XK_0));
+  if (k >= XK_F1 && k <= XK_F12)
+    return static_cast<Key>(static_cast<int>(Key::f1) + static_cast<int>(k - XK_F1));
   switch (k) {
-    case XK_space: return Key::space;
+    case XK_space:
+      return Key::space;
     case XK_Return:
-    case XK_KP_Enter: return Key::enter;
-    case XK_Escape: return Key::escape;
+    case XK_KP_Enter:
+      return Key::enter;
+    case XK_Escape:
+      return Key::escape;
     case XK_Tab:
-    case XK_ISO_Left_Tab: return Key::tab;
-    case XK_BackSpace: return Key::backspace;
-    case XK_Delete: return Key::delete_;
-    case XK_Left: return Key::left;
-    case XK_Right: return Key::right;
-    case XK_Up: return Key::up;
-    case XK_Down: return Key::down;
-    case XK_Home: return Key::home;
-    case XK_End: return Key::end;
-    case XK_Prior: return Key::page_up;
-    case XK_Next: return Key::page_down;
-    default: return Key::unknown;
+    case XK_ISO_Left_Tab:
+      return Key::tab;
+    case XK_BackSpace:
+      return Key::backspace;
+    case XK_Delete:
+      return Key::delete_;
+    case XK_Left:
+      return Key::left;
+    case XK_Right:
+      return Key::right;
+    case XK_Up:
+      return Key::up;
+    case XK_Down:
+      return Key::down;
+    case XK_Home:
+      return Key::home;
+    case XK_End:
+      return Key::end;
+    case XK_Prior:
+      return Key::page_up;
+    case XK_Next:
+      return Key::page_down;
+    default:
+      return Key::unknown;
   }
 }
 
 unsigned int cursor_shape(Cursor c) {
   switch (c) {
-    case Cursor::hand: return XC_hand2;
-    case Cursor::text: return XC_xterm;
-    case Cursor::resize_horizontal: return XC_sb_h_double_arrow;
-    case Cursor::resize_vertical: return XC_sb_v_double_arrow;
-    case Cursor::arrow: break;
+    case Cursor::hand:
+      return XC_hand2;
+    case Cursor::text:
+      return XC_xterm;
+    case Cursor::resize_horizontal:
+      return XC_sb_h_double_arrow;
+    case Cursor::resize_vertical:
+      return XC_sb_v_double_arrow;
+    case Cursor::arrow:
+      break;
   }
   return XC_left_ptr;
 }
@@ -155,7 +180,8 @@ class X11Backend final : public PlatformBackend {
   X11Backend(Display* display, BackendHost& host);
   ~X11Backend() override;
 
-  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options, WindowEvents& events) override;
+  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options,
+                                              WindowEvents& events) override;
   void run() override;
   void quit() override { quit_ = true; }
   void wake() override;
@@ -240,15 +266,17 @@ void X11Window::show() {
 void X11Window::set_title(std::string_view utf8) {
   const std::string title(utf8);
   XStoreName(display_, window_, title.c_str());
-  XChangeProperty(display_, window_, backend_.atom("_NET_WM_NAME"), backend_.atom("UTF8_STRING"), 8, PropModeReplace,
-                  reinterpret_cast<const unsigned char*>(title.data()), static_cast<int>(title.size()));
+  XChangeProperty(display_, window_, backend_.atom("_NET_WM_NAME"), backend_.atom("UTF8_STRING"), 8,
+                  PropModeReplace, reinterpret_cast<const unsigned char*>(title.data()),
+                  static_cast<int>(title.size()));
 }
 
 void X11Window::set_dark_frame(bool dark) {
   // Read by GNOME's window manager and some others; ignored harmlessly elsewhere.
   const char* variant = dark ? "dark" : "light";
-  XChangeProperty(display_, window_, backend_.atom("_GTK_THEME_VARIANT"), backend_.atom("UTF8_STRING"), 8,
-                  PropModeReplace, reinterpret_cast<const unsigned char*>(variant),
+  XChangeProperty(display_, window_, backend_.atom("_GTK_THEME_VARIANT"),
+                  backend_.atom("UTF8_STRING"), 8, PropModeReplace,
+                  reinterpret_cast<const unsigned char*>(variant),
                   static_cast<int>(std::strlen(variant)));
 }
 
@@ -294,7 +322,8 @@ void X11Window::resize(int w, int h) {
 void X11Window::blit(int x, int y, int w, int h) {
   const RectI r = RectI{x, y, w, h}.intersect({0, 0, width_, height_});
   if (r.empty()) return;
-  XPutImage(display_, window_, gc_, image_, r.x, r.y, r.x, r.y, static_cast<unsigned>(r.w), static_cast<unsigned>(r.h));
+  XPutImage(display_, window_, gc_, image_, r.x, r.y, r.x, r.y, static_cast<unsigned>(r.w),
+            static_cast<unsigned>(r.h));
 }
 
 void X11Window::present(std::span<const RectI> dirty) {
@@ -315,7 +344,8 @@ void X11Window::handle(XEvent& e) {
       blit(e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);  // our copy is current
       break;
     case ConfigureNotify:
-      if (e.xconfigure.width != width_ || e.xconfigure.height != height_) resize(e.xconfigure.width, e.xconfigure.height);
+      if (e.xconfigure.width != width_ || e.xconfigure.height != height_)
+        resize(e.xconfigure.width, e.xconfigure.height);
       break;
     case MotionNotify:
       events_.on_mouse_move({static_cast<float>(e.xmotion.x), static_cast<float>(e.xmotion.y)},
@@ -332,16 +362,21 @@ void X11Window::handle(XEvent& e) {
       const unsigned int b = e.xbutton.button;
       if (b >= Button4 && b <= 7) {  // wheel notches arrive as buttons 4 to 7, press only
         if (down) {
-          const Point delta = b == Button4 ? Point{0, -kWheelNotchPixels} : b == Button5 ? Point{0, kWheelNotchPixels}
-                              : b == 6     ? Point{-kWheelNotchPixels, 0}  : Point{kWheelNotchPixels, 0};
+          const Point delta = b == Button4   ? Point{0, -kWheelNotchPixels}
+                              : b == Button5 ? Point{0, kWheelNotchPixels}
+                              : b == 6       ? Point{-kWheelNotchPixels, 0}
+                                             : Point{kWheelNotchPixels, 0};
           events_.on_mouse_wheel(p, delta, mods);
         }
         break;
       }
-      const MouseButton button = b == Button1 ? MouseButton::left : b == Button3 ? MouseButton::right : MouseButton::middle;
+      const MouseButton button = b == Button1   ? MouseButton::left
+                                 : b == Button3 ? MouseButton::right
+                                                : MouseButton::middle;
       int clicks = 1;
       if (down && button == MouseButton::left) {
-        if (e.xbutton.time - last_press_time_ <= kDoubleClickMs && std::abs(e.xbutton.x - last_press_x_) <= kDoubleClickSlop &&
+        if (e.xbutton.time - last_press_time_ <= kDoubleClickMs &&
+            std::abs(e.xbutton.x - last_press_x_) <= kDoubleClickSlop &&
             std::abs(e.xbutton.y - last_press_y_) <= kDoubleClickSlop) {
           clicks = 2;
         }
@@ -375,7 +410,8 @@ void X11Window::handle(XEvent& e) {
       events_.on_capture_lost();
       break;
     case ClientMessage:
-      if (static_cast<Atom>(e.xclient.data.l[0]) == backend_.atom("WM_DELETE_WINDOW")) events_.on_close_request();
+      if (static_cast<Atom>(e.xclient.data.l[0]) == backend_.atom("WM_DELETE_WINDOW"))
+        events_.on_close_request();
       break;
     default:
       break;
@@ -409,7 +445,8 @@ X11Backend::~X11Backend() {
   XCloseDisplay(display_);
 }
 
-std::unique_ptr<NativeWindow> X11Backend::create_window(const WindowOptions& options, WindowEvents& events) {
+std::unique_ptr<NativeWindow> X11Backend::create_window(const WindowOptions& options,
+                                                        WindowEvents& events) {
   return std::make_unique<X11Window>(*this, options, events);
 }
 
@@ -432,7 +469,8 @@ void X11Backend::wake() {
 SystemInfo X11Backend::system_info() const {
   SystemInfo info;
   // No portable dark-mode query exists on X11 without D-Bus; GTK_THEME is the common hint.
-  if (const char* gtk = std::getenv("GTK_THEME")) info.dark_mode = std::strstr(gtk, ":dark") != nullptr;
+  if (const char* gtk = std::getenv("GTK_THEME"))
+    info.dark_mode = std::strstr(gtk, ":dark") != nullptr;
   return info;
 }
 
@@ -459,7 +497,8 @@ void X11Backend::run() {
     int64_t due = INT64_MAX;
     for (X11Window* w : windows_) due = std::min(due, w->next_frame_due());
     int timeout_ms = -1;
-    if (due != INT64_MAX) timeout_ms = static_cast<int>(std::max<int64_t>(0, (due - now_ns() + 999'999) / 1'000'000));
+    if (due != INT64_MAX)
+      timeout_ms = static_cast<int>(std::max<int64_t>(0, (due - now_ns() + 999'999) / 1'000'000));
     XFlush(display_);
     pollfd fds[2] = {{x_fd, POLLIN, 0}, {wake_fd_, POLLIN, 0}};
     poll(fds, 2, timeout_ms);

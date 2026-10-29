@@ -18,8 +18,10 @@ namespace {
 constexpr size_t kMaxDirtyRects = 8;
 
 RectI to_device(const Rect& r, float scale) {
-  const int x0 = static_cast<int>(std::floor(r.x * scale)), y0 = static_cast<int>(std::floor(r.y * scale));
-  const int x1 = static_cast<int>(std::ceil(r.right() * scale)), y1 = static_cast<int>(std::ceil(r.bottom() * scale));
+  const int x0 = static_cast<int>(std::floor(r.x * scale)),
+            y0 = static_cast<int>(std::floor(r.y * scale));
+  const int x1 = static_cast<int>(std::ceil(r.right() * scale)),
+            y1 = static_cast<int>(std::ceil(r.bottom() * scale));
   return {x0, y0, x1 - x0, y1 - y0};
 }
 
@@ -85,7 +87,8 @@ std::unique_ptr<Widget> Tree::detach(Widget& w) {
   Widget* parent = w.parent_;
   if (!parent) return nullptr;
   auto& kids = parent->children_;
-  const auto it = std::find_if(kids.begin(), kids.end(), [&](const auto& c) { return c.get() == &w; });
+  const auto it =
+      std::find_if(kids.begin(), kids.end(), [&](const auto& c) { return c.get() == &w; });
   if (it == kids.end()) return nullptr;
   std::unique_ptr<Widget> owned = std::move(*it);
   kids.erase(it);
@@ -199,12 +202,15 @@ void WindowState::draw_frame(int64_t frame_time_ns) {
   for (auto it = animating.begin(); it != animating.end();) {
     Widget* w = find(it->first);
     if (w && w->visible()) w->invalidate();
-    if (!w || !w->visible() || frame_time >= it->second) it = animating.erase(it);
-    else ++it;
+    if (!w || !w->visible() || frame_time >= it->second)
+      it = animating.erase(it);
+    else
+      ++it;
   }
   if (layout_dirty) {
     layout_dirty = false;
-    window.arrange({0, 0, static_cast<float>(width_px) / scale, static_cast<float>(height_px) / scale});
+    window.arrange(
+        {0, 0, static_cast<float>(width_px) / scale, static_cast<float>(height_px) / scale});
     dirty.assign(1, RectI{0, 0, width_px, height_px});
   }
   if (dirty.empty() || frame.empty()) return;
@@ -273,7 +279,8 @@ void WindowState::move_focus(bool backwards) {
   if (order.empty()) return;
   const auto it = std::find(order.begin(), order.end(), find(focused));
   size_t next;
-  if (it == order.end()) next = backwards ? order.size() - 1 : 0;
+  if (it == order.end())
+    next = backwards ? order.size() - 1 : 0;
   else {
     const size_t i = static_cast<size_t>(it - order.begin());
     next = backwards ? (i + order.size() - 1) % order.size() : (i + 1) % order.size();
@@ -299,11 +306,13 @@ void WindowState::on_mouse_move(Point device, Modifiers mods) {
   });
 }
 
-void WindowState::on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods, int clicks) {
+void WindowState::on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods,
+                                  int clicks) {
   app.state().guarded([&] {
     const Point p{device.x / scale, device.y / scale};
     last_mouse = p;
-    MouseEvent e{down ? MouseEvent::Kind::press : MouseEvent::Kind::release, p, button, mods, {}, clicks};
+    MouseEvent e{
+        down ? MouseEvent::Kind::press : MouseEvent::Kind::release, p, button, mods, {}, clicks};
     const bool pressing = pressed != WidgetId{};
     if (!down) {
       if (!pressing || button != pressed_button) {
@@ -380,8 +389,8 @@ void WindowState::on_key(const KeyEvent& e) {
       move_focus(e.modifiers.shift);
       return;
     }
-    const bool navigation = e.key == Key::left || e.key == Key::right || e.key == Key::up || e.key == Key::down ||
-                            e.key == Key::space || e.key == Key::enter;
+    const bool navigation = e.key == Key::left || e.key == Key::right || e.key == Key::up ||
+                            e.key == Key::down || e.key == Key::space || e.key == Key::enter;
     if (e.down && navigation && !keyboard_mode) {
       keyboard_mode = true;
       if (Widget* f = find(focused)) f->invalidate();
@@ -449,7 +458,8 @@ void Window::close() { remove(); }
 float Window::scale() const { return state_->scale; }
 
 Size Window::client_size() const {
-  return {static_cast<float>(state_->width_px) / state_->scale, static_cast<float>(state_->height_px) / state_->scale};
+  return {static_cast<float>(state_->width_px) / state_->scale,
+          static_cast<float>(state_->height_px) / state_->scale};
 }
 
 Size Window::measure(Size available) { return available; }

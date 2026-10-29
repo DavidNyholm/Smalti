@@ -64,12 +64,13 @@ class GlyphCache {
 
 float text_width(const Font& font, float size, std::string_view utf8);
 // Draws one line with its baseline at origin.y (device pixels); returns the pen's final x.
-float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size, Point origin, std::string_view utf8,
-                Color color, const TextTuning& tuning);
+float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size, Point origin,
+                std::string_view utf8, Color color, const TextTuning& tuning);
 
 // Splits `utf8` into lines no wider than `max_width` (device pixels for `size`), breaking at
 // spaces; a word longer than a line is broken between characters. Explicit newlines break too.
-std::vector<std::string_view> wrap_lines(const Font& font, float size, std::string_view utf8, float max_width);
+std::vector<std::string_view> wrap_lines(const Font& font, float size, std::string_view utf8,
+                                         float max_width);
 
 // Decodes one UTF-8 sequence at s[i], advancing i. Invalid bytes become U+FFFD.
 char32_t next_codepoint(std::string_view s, size_t& i);

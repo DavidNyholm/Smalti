@@ -71,7 +71,8 @@ struct WindowState final : platform::WindowEvents {
 
   // platform::WindowEvents
   void on_mouse_move(Point device, Modifiers mods) override;
-  void on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods, int clicks) override;
+  void on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods,
+                       int clicks) override;
   void on_mouse_wheel(Point device, Point delta, Modifiers mods) override;
   void on_mouse_leave() override;
   void on_key(const KeyEvent& e) override;

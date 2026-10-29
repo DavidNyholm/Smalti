@@ -6,7 +6,8 @@
 
 namespace smalti::platform {
 
-std::unique_ptr<PlatformBackend> create_backend(Backend kind, [[maybe_unused]] Presentation presentation,
+std::unique_ptr<PlatformBackend> create_backend(Backend kind,
+                                                [[maybe_unused]] Presentation presentation,
                                                 BackendHost& host) {
 #if defined(SMALTI_HEADLESS_ONLY)
   // Built without native backends (SMALTI_HEADLESS_ONLY): every window draws into memory.
@@ -16,7 +17,8 @@ std::unique_ptr<PlatformBackend> create_backend(Backend kind, [[maybe_unused]] P
   return create_headless_backend(host);
 #else
   switch (kind) {
-    case Backend::headless: return create_headless_backend(host);
+    case Backend::headless:
+      return create_headless_backend(host);
     case Backend::win32:
 #if defined(_WIN32)
       return create_win32_backend(presentation, host);
@@ -30,7 +32,8 @@ std::unique_ptr<PlatformBackend> create_backend(Backend kind, [[maybe_unused]] P
 #else
       throw std::runtime_error("smalti: the X11 backend exists only on Linux");
 #endif
-    case Backend::automatic: break;
+    case Backend::automatic:
+      break;
   }
 #if defined(_WIN32)
   return create_win32_backend(presentation, host);

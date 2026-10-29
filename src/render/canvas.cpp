@@ -22,14 +22,19 @@ constexpr int kShadowSamples = 8;
 // seen, and the corner-tile cache key.
 constexpr float kShadowKeySteps = 64;
 
-float srgb_to_linear(float v) { return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); }
-float linear_to_srgb(float v) { return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1.0f / 2.4f) - 0.055f; }
+float srgb_to_linear(float v) {
+  return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+}
+float linear_to_srgb(float v) {
+  return v <= 0.0031308f ? v * 12.92f : 1.055f * std::pow(v, 1.0f / 2.4f) - 0.055f;
+}
 
 struct GammaTables {
   std::array<float, 256> decode{};
   std::array<uint8_t, kEncodeSteps> encode{};
   GammaTables() {
-    for (int i = 0; i < 256; ++i) decode[static_cast<size_t>(i)] = srgb_to_linear(static_cast<float>(i) / 255.0f);
+    for (int i = 0; i < 256; ++i)
+      decode[static_cast<size_t>(i)] = srgb_to_linear(static_cast<float>(i) / 255.0f);
     for (int i = 0; i < kEncodeSteps; ++i) {
       const float v = linear_to_srgb(static_cast<float>(i) / (kEncodeSteps - 1));
       encode[static_cast<size_t>(i)] = static_cast<uint8_t>(std::lround(v * 255.0f));
@@ -48,7 +53,8 @@ const GammaTables& gamma() {
 uint8_t channel(uint32_t px, int shift) { return static_cast<uint8_t>(px >> shift & 0xFF); }
 
 uint32_t pack(int r, int g, int b) {
-  return 0xFF000000u | static_cast<uint32_t>(r) << 16 | static_cast<uint32_t>(g) << 8 | static_cast<uint32_t>(b);
+  return 0xFF000000u | static_cast<uint32_t>(r) << 16 | static_cast<uint32_t>(g) << 8 |
+         static_cast<uint32_t>(b);
 }
 
 // Interleaved gradient noise (Jimenez 2014): a cheap per-pixel value in [0, 1) without a
@@ -105,7 +111,8 @@ float shadow_value(float px, float py, float sigma, float corner, float half_w, 
 }
 
 bool whole_pixels(RectF r) {
-  return r.x == std::floor(r.x) && r.y == std::floor(r.y) && r.w == std::floor(r.w) && r.h == std::floor(r.h);
+  return r.x == std::floor(r.x) && r.y == std::floor(r.y) && r.w == std::floor(r.w) &&
+         r.h == std::floor(r.h);
 }
 
 }  // namespace
@@ -117,9 +124,11 @@ void Canvas::set_target(PixelBuffer target) {
 
 void Canvas::set_clip(RectI clip) { clip_ = clip.intersect({0, 0, target_.width, target_.height}); }
 
-void Canvas::clear(Color c) { fill_rect({static_cast<float>(clip_.x), static_cast<float>(clip_.y),
-                                         static_cast<float>(clip_.w), static_cast<float>(clip_.h)},
-                                        c.with_alpha(1.0f)); }
+void Canvas::clear(Color c) {
+  fill_rect({static_cast<float>(clip_.x), static_cast<float>(clip_.y), static_cast<float>(clip_.w),
+             static_cast<float>(clip_.h)},
+            c.with_alpha(1.0f));
+}
 
 void Canvas::fill_rect(RectF r, Color c) {
   if (!whole_pixels(r)) {
@@ -129,10 +138,13 @@ void Canvas::fill_rect(RectF r, Color c) {
     return;
   }
   // Whole-pixel rectangles (backgrounds, dividers) need no coverage: store or blend directly.
-  const RectI area = RectI{static_cast<int>(r.x), static_cast<int>(r.y), static_cast<int>(r.w), static_cast<int>(r.h)}
+  const RectI area = RectI{static_cast<int>(r.x), static_cast<int>(r.y), static_cast<int>(r.w),
+                           static_cast<int>(r.h)}
                          .intersect(clip_);
-  const int sr = static_cast<int>(std::lround(c.r * 255)), sg = static_cast<int>(std::lround(c.g * 255));
-  const int sb = static_cast<int>(std::lround(c.b * 255)), a = static_cast<int>(std::lround(c.a * 255));
+  const int sr = static_cast<int>(std::lround(c.r * 255)),
+            sg = static_cast<int>(std::lround(c.g * 255));
+  const int sb = static_cast<int>(std::lround(c.b * 255)),
+            a = static_cast<int>(std::lround(c.a * 255));
   if (a <= 0) return;
   const int inv = 255 - a;
   for (int y = area.y; y < area.bottom(); ++y) {
@@ -143,7 +155,8 @@ void Canvas::fill_rect(RectF r, Color c) {
     }
     for (int x = 0; x < area.w; ++x) {
       const uint32_t d = dst[x];
-      dst[x] = pack((sr * a + channel(d, 16) * inv + 127) / 255, (sg * a + channel(d, 8) * inv + 127) / 255,
+      dst[x] = pack((sr * a + channel(d, 16) * inv + 127) / 255,
+                    (sg * a + channel(d, 8) * inv + 127) / 255,
                     (sb * a + channel(d, 0) * inv + 127) / 255);
     }
   }
@@ -167,7 +180,9 @@ void Canvas::stroke_rounded_rect(RectF r, float radius, float width, Color c) {
   fill_path(path_, {}, c);
 }
 
-void Canvas::fill_path(const Path& path, const Transform& t, Color c) { blend_mask(raster_.fill(path, t, clip_), c); }
+void Canvas::fill_path(const Path& path, const Transform& t, Color c) {
+  blend_mask(raster_.fill(path, t, clip_), c);
+}
 
 void Canvas::stroke_polyline(std::span<const Point> pts, float width, Color c) {
   const float r = width * 0.5f;
@@ -177,7 +192,8 @@ void Canvas::stroke_polyline(std::span<const Point> pts, float width, Color c) {
     const float dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
     if (len == 0.0f) continue;
     const float nx = -dy / len * r, ny = dx / len * r;
-    Point q[4] = {{a.x + nx, a.y + ny}, {b.x + nx, b.y + ny}, {b.x - nx, b.y - ny}, {a.x - nx, a.y - ny}};
+    Point q[4] = {
+        {a.x + nx, a.y + ny}, {b.x + nx, b.y + ny}, {b.x - nx, b.y - ny}, {a.x - nx, a.y - ny}};
     // Every piece must wind the same way, or overlapping pieces cancel instead of adding.
     float twice_area = 0;
     for (int k = 0; k < 4; ++k) twice_area += q[k].x * q[(k + 1) % 4].y - q[(k + 1) % 4].x * q[k].y;
@@ -191,8 +207,10 @@ void Canvas::stroke_polyline(std::span<const Point> pts, float width, Color c) {
 
 void Canvas::blend_mask(MaskView m, Color c) {
   if (m.empty()) return;
-  const int sr = static_cast<int>(std::lround(c.r * 255)), sg = static_cast<int>(std::lround(c.g * 255));
-  const int sb = static_cast<int>(std::lround(c.b * 255)), alpha = static_cast<int>(std::lround(c.a * 255));
+  const int sr = static_cast<int>(std::lround(c.r * 255)),
+            sg = static_cast<int>(std::lround(c.g * 255));
+  const int sb = static_cast<int>(std::lround(c.b * 255)),
+            alpha = static_cast<int>(std::lround(c.a * 255));
   for (int y = 0; y < m.h; ++y) {
     uint32_t* dst = target_.row(m.y + y) + m.x;
     const uint8_t* cov = m.coverage + static_cast<size_t>(y) * static_cast<size_t>(m.w);
@@ -201,7 +219,8 @@ void Canvas::blend_mask(MaskView m, Color c) {
       if (a == 0) continue;
       const uint32_t d = dst[x];
       const int inv = 255 - a;
-      dst[x] = pack((sr * a + channel(d, 16) * inv + 127) / 255, (sg * a + channel(d, 8) * inv + 127) / 255,
+      dst[x] = pack((sr * a + channel(d, 16) * inv + 127) / 255,
+                    (sg * a + channel(d, 8) * inv + 127) / 255,
                     (sb * a + channel(d, 0) * inv + 127) / 255);
     }
   }
@@ -213,7 +232,8 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
   sigma = std::round(sigma * kShadowKeySteps) / kShadowKeySteps;
   if (sigma <= 0 || c.a <= 0) return;
   const float reach = kShadowReach * sigma;
-  const RectI area = RectI{static_cast<int>(std::floor(box.x - reach)), static_cast<int>(std::floor(box.y - reach)),
+  const RectI area = RectI{static_cast<int>(std::floor(box.x - reach)),
+                           static_cast<int>(std::floor(box.y - reach)),
                            static_cast<int>(std::ceil(box.w + 2 * reach)) + 1,
                            static_cast<int>(std::ceil(box.h + 2 * reach)) + 1}
                          .intersect(clip_);
@@ -230,11 +250,13 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
   shadow_rows_.resize(static_cast<size_t>(area.h));
   for (int x = 0; x < area.w; ++x) {
     const float px = static_cast<float>(area.x + x) + 0.5f - cx;
-    shadow_cols_[static_cast<size_t>(x)] = 0.5f * (erf_approx((px + half_w) * k) - erf_approx((px - half_w) * k));
+    shadow_cols_[static_cast<size_t>(x)] =
+        0.5f * (erf_approx((px + half_w) * k) - erf_approx((px - half_w) * k));
   }
   for (int y = 0; y < area.h; ++y) {
     const float py = static_cast<float>(area.y + y) + 0.5f - cy;
-    shadow_rows_[static_cast<size_t>(y)] = 0.5f * (erf_approx((py + half_h) * k) - erf_approx((py - half_h) * k));
+    shadow_rows_[static_cast<size_t>(y)] =
+        0.5f * (erf_approx((py + half_h) * k) - erf_approx((py - half_h) * k));
   }
   const float straight_x = half_w - corner - reach, straight_y = half_h - corner - reach;
   // On a whole-pixel box large enough for its corners not to overlap, each corner region is
@@ -243,16 +265,20 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
   // maps to exactly one tile column.
   const float origin = std::ceil(reach);
   const int tile = static_cast<int>(std::ceil(corner + reach + origin)) + 1;
-  const std::vector<float>* corner_tile =
-      whole_pixels(box) && straight_x > 0 && straight_y > 0 ? &shadow_corner(sigma, corner, tile) : nullptr;
+  const std::vector<float>* corner_tile = whole_pixels(box) && straight_x > 0 && straight_y > 0
+                                              ? &shadow_corner(sigma, corner, tile)
+                                              : nullptr;
   // The occluder's interior, inset by the corner radius so the rounded corners stay drawn.
-  const RectF hidden{occluder.x + radius, occluder.y + radius, occluder.w - 2 * radius, occluder.h - 2 * radius};
+  const RectF hidden{occluder.x + radius, occluder.y + radius, occluder.w - 2 * radius,
+                     occluder.h - 2 * radius};
   for (int y = area.y; y < area.bottom(); ++y) {
     uint32_t* dst = target_.row(y);
     const float py = static_cast<float>(y) + 0.5f - cy;
-    const bool row_hidden = static_cast<float>(y) >= hidden.y && static_cast<float>(y + 1) <= hidden.bottom();
+    const bool row_hidden =
+        static_cast<float>(y) >= hidden.y && static_cast<float>(y + 1) <= hidden.bottom();
     for (int x = area.x; x < area.right(); ++x) {
-      if (row_hidden && static_cast<float>(x) >= hidden.x && static_cast<float>(x + 1) <= hidden.right()) {
+      if (row_hidden && static_cast<float>(x) >= hidden.x &&
+          static_cast<float>(x + 1) <= hidden.right()) {
         x = static_cast<int>(hidden.right()) - 1;  // jump over the covered span
         continue;
       }
@@ -265,7 +291,8 @@ void Canvas::shadow(RectF box, float radius, float sigma, Color c, bool dither, 
       } else if (corner_tile) {
         const int u = std::clamp(static_cast<int>(half_w - std::fabs(px) + origin), 0, tile - 1);
         const int w = std::clamp(static_cast<int>(half_h - std::fabs(py) + origin), 0, tile - 1);
-        v = (*corner_tile)[static_cast<size_t>(w) * static_cast<size_t>(tile) + static_cast<size_t>(u)];
+        v = (*corner_tile)[static_cast<size_t>(w) * static_cast<size_t>(tile) +
+                           static_cast<size_t>(u)];
       } else {
         v = shadow_value(px, py, sigma, corner, half_w, half_h);
       }
@@ -291,7 +318,8 @@ const std::vector<float>& Canvas::shadow_corner(float sigma, float corner, int s
   std::vector<float> tile(cells);
   for (int v = 0; v < size; ++v) {
     for (int u = 0; u < size; ++u) {
-      const float px = static_cast<float>(u) + 0.5f - origin - half, py = static_cast<float>(v) + 0.5f - origin - half;
+      const float px = static_cast<float>(u) + 0.5f - origin - half,
+                  py = static_cast<float>(v) + 0.5f - origin - half;
       tile[static_cast<size_t>(v) * static_cast<size_t>(size) + static_cast<size_t>(u)] =
           shadow_value(px, py, sigma, corner, half, half);
     }
@@ -321,8 +349,8 @@ void Canvas::blend_glyph(MaskView m, int ox, int oy, Color c, const TextTuning& 
   const GammaTables& gt = gamma();
   const float lin_r = srgb_to_linear(c.r), lin_g = srgb_to_linear(c.g), lin_b = srgb_to_linear(c.b);
   const float luminance = 0.2126f * lin_r + 0.7152f * lin_g + 0.0722f * lin_b;
-  const bool linear =
-      tuning.blend == TextBlend::linear || (tuning.blend == TextBlend::adaptive && luminance > 0.5f);
+  const bool linear = tuning.blend == TextBlend::linear ||
+                      (tuning.blend == TextBlend::adaptive && luminance > 0.5f);
   std::array<float, 256> cov_table{};
   for (size_t i = 0; i < cov_table.size(); ++i) {
     const float v = static_cast<float>(i) / 255.0f;

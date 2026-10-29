@@ -22,7 +22,8 @@ using detail::RectI;
 class WindowEvents {
  public:
   virtual void on_mouse_move(Point device, Modifiers mods) = 0;
-  virtual void on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods, int clicks) = 0;
+  virtual void on_mouse_button(MouseButton button, bool down, Point device, Modifiers mods,
+                               int clicks) = 0;
   virtual void on_mouse_wheel(Point device, Point delta_logical, Modifiers mods) = 0;
   virtual void on_mouse_leave() = 0;
   virtual void on_key(const KeyEvent& e) = 0;
@@ -78,21 +79,24 @@ class BackendHost {
 class PlatformBackend {
  public:
   virtual ~PlatformBackend() = default;
-  virtual std::unique_ptr<NativeWindow> create_window(const WindowOptions& options, WindowEvents& events) = 0;
-  virtual void run() = 0;   // returns after quit()
+  virtual std::unique_ptr<NativeWindow> create_window(const WindowOptions& options,
+                                                      WindowEvents& events) = 0;
+  virtual void run() = 0;  // returns after quit()
   virtual void quit() = 0;
   virtual void wake() = 0;  // thread-safe: calls host.on_wake() on the UI thread soon
   virtual int64_t now_ns() const = 0;
   virtual SystemInfo system_info() const = 0;
 };
 
-std::unique_ptr<PlatformBackend> create_backend(Backend kind, Presentation presentation, BackendHost& host);
+std::unique_ptr<PlatformBackend> create_backend(Backend kind, Presentation presentation,
+                                                BackendHost& host);
 std::unique_ptr<PlatformBackend> create_headless_backend(BackendHost& host);
 #if !defined(SMALTI_HEADLESS_ONLY)
 #if defined(_WIN32)
 std::unique_ptr<PlatformBackend> create_win32_backend(Presentation presentation, BackendHost& host);
 #elif defined(__linux__)
-std::unique_ptr<PlatformBackend> create_x11_backend(BackendHost& host);  // nullptr without a display
+std::unique_ptr<PlatformBackend> create_x11_backend(
+    BackendHost& host);  // nullptr without a display
 #endif
 #endif
 

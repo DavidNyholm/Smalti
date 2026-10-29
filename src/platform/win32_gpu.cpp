@@ -2,9 +2,10 @@
 
 #include <d3d11.h>
 #include <dxgi1_3.h>
-#include <wrl/client.h>
 
 #include <algorithm>
+
+#include <wrl/client.h>
 
 namespace smalti::platform {
 
@@ -22,7 +23,8 @@ using CreateDeviceFn = decltype(&D3D11CreateDevice);
 CreateDeviceFn load_create_device() {
   static CreateDeviceFn fn = [] {
     const HMODULE module = LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    return module ? reinterpret_cast<CreateDeviceFn>(GetProcAddress(module, "D3D11CreateDevice")) : nullptr;
+    return module ? reinterpret_cast<CreateDeviceFn>(GetProcAddress(module, "D3D11CreateDevice"))
+                  : nullptr;
   }();
   return fn;
 }
@@ -71,8 +73,9 @@ std::unique_ptr<GpuDevice> GpuDevice::create() {
   const CreateDeviceFn create_device = load_create_device();
   if (!create_device) return nullptr;
   auto impl = std::make_unique<GpuDeviceImpl>();
-  const HRESULT hr = create_device(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr,
-                                   0, D3D11_SDK_VERSION, impl->device.GetAddressOf(), nullptr, impl->context.GetAddressOf());
+  const HRESULT hr = create_device(
+      nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
+      D3D11_SDK_VERSION, impl->device.GetAddressOf(), nullptr, impl->context.GetAddressOf());
   if (FAILED(hr)) return nullptr;
   ComPtr<IDXGIDevice> dxgi;
   ComPtr<IDXGIAdapter> adapter;
@@ -87,7 +90,8 @@ GpuSurface::GpuSurface(std::unique_ptr<GpuSurfaceImpl> impl) : impl_(std::move(i
 
 GpuSurface::~GpuSurface() = default;
 
-std::unique_ptr<GpuSurface> GpuSurface::create(GpuDevice& device, HWND hwnd, int width, int height) {
+std::unique_ptr<GpuSurface> GpuSurface::create(GpuDevice& device, HWND hwnd, int width,
+                                               int height) {
   auto s = std::make_unique<GpuSurfaceImpl>();
   s->dev = &device.impl();
   s->hwnd = hwnd;
@@ -105,8 +109,8 @@ std::unique_ptr<GpuSurface> GpuSurface::create(GpuDevice& device, HWND hwnd, int
   desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
   desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
   ComPtr<IDXGISwapChain1> swap1;
-  if (FAILED(s->dev->factory->CreateSwapChainForHwnd(s->dev->device.Get(), hwnd, &desc, nullptr, nullptr,
-                                                       swap1.GetAddressOf())) ||
+  if (FAILED(s->dev->factory->CreateSwapChainForHwnd(s->dev->device.Get(), hwnd, &desc, nullptr,
+                                                     nullptr, swap1.GetAddressOf())) ||
       FAILED(swap1.As(&s->swap))) {
     return nullptr;
   }
@@ -127,7 +131,8 @@ bool GpuSurface::resize(int width, int height) {
   s.width = std::max(1, width);
   s.height = std::max(1, height);
   s.dev->context->ClearState();
-  if (FAILED(s.swap->ResizeBuffers(0, static_cast<UINT>(s.width), static_cast<UINT>(s.height), DXGI_FORMAT_UNKNOWN,
+  if (FAILED(s.swap->ResizeBuffers(0, static_cast<UINT>(s.width), static_cast<UINT>(s.height),
+                                   DXGI_FORMAT_UNKNOWN,
                                    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT))) {
     return false;
   }
@@ -140,10 +145,12 @@ bool GpuSurface::present(std::span<const detail::RectI> dirty) {
   for (const detail::RectI& r : dirty) {
     const detail::RectI c = r.intersect({0, 0, s.width, s.height});
     if (c.empty()) continue;
-    const D3D11_BOX box{static_cast<UINT>(c.x), static_cast<UINT>(c.y), 0, static_cast<UINT>(c.right()),
-                        static_cast<UINT>(c.bottom()), 1};
-    const uint32_t* src = s.pixels.pixels.data() + static_cast<size_t>(c.y) * static_cast<size_t>(s.width) + c.x;
-    s.dev->context->UpdateSubresource(s.frame.Get(), 0, &box, src, static_cast<UINT>(s.width * kBytesPerPixel), 0);
+    const D3D11_BOX box{static_cast<UINT>(c.x),       static_cast<UINT>(c.y),        0,
+                        static_cast<UINT>(c.right()), static_cast<UINT>(c.bottom()), 1};
+    const uint32_t* src =
+        s.pixels.pixels.data() + static_cast<size_t>(c.y) * static_cast<size_t>(s.width) + c.x;
+    s.dev->context->UpdateSubresource(s.frame.Get(), 0, &box, src,
+                                      static_cast<UINT>(s.width * kBytesPerPixel), 0);
   }
   // A flip-model back buffer starts undefined, so the whole frame is copied: one GPU copy,
   // a fraction of a millisecond even at 4K.
@@ -157,7 +164,8 @@ bool GpuSurface::present(std::span<const detail::RectI> dirty) {
 HANDLE GpuSurface::frame_waitable() const { return impl_->waitable; }
 
 size_t GpuSurface::bytes() const {
-  const size_t frame = static_cast<size_t>(impl_->width) * static_cast<size_t>(impl_->height) * kBytesPerPixel;
+  const size_t frame =
+      static_cast<size_t>(impl_->width) * static_cast<size_t>(impl_->height) * kBytesPerPixel;
   return frame * (kSwapBuffers + 1);  // the swap chain's buffers and the frame texture
 }
 

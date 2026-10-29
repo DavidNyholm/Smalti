@@ -33,7 +33,8 @@ MaskView Rasterizer::fill(const Path& path, const Transform& t, RectI clip) {
     y1 = std::max(y1, d.y);
   }
   const int ix0 = static_cast<int>(std::floor(x0)), iy0 = static_cast<int>(std::floor(y0));
-  const RectI bounds{ix0, iy0, static_cast<int>(std::ceil(x1)) - ix0, static_cast<int>(std::ceil(y1)) - iy0};
+  const RectI bounds{ix0, iy0, static_cast<int>(std::ceil(x1)) - ix0,
+                     static_cast<int>(std::ceil(y1)) - iy0};
   const RectI area = bounds.intersect(clip);
   if (area.empty()) return {};
   reset(area);
@@ -132,7 +133,8 @@ void Rasterizer::accumulate_line(Point p0, Point p1) {
   const int row_end = std::min(area_.h, static_cast<int>(std::ceil(p1.y)));
   for (int row = static_cast<int>(y_start); row < row_end; ++row) {
     float* cells = &acc_[static_cast<size_t>(row) * static_cast<size_t>(stride_)];
-    const float dy = std::min(static_cast<float>(row + 1), p1.y) - std::max(static_cast<float>(row), p0.y);
+    const float dy =
+        std::min(static_cast<float>(row + 1), p1.y) - std::max(static_cast<float>(row), p0.y);
     const float x_next = x + dxdy * dy;
     const float d = dy * dir;
     // Rounding can push x a hair outside [0, w]; the cell index must not follow it.
@@ -173,12 +175,13 @@ void Rasterizer::accumulate_line(Point p0, Point p1) {
 void Rasterizer::quad(Point p0, Point c, Point p1) {
   // Wang's formula: segments needed so no chord strays more than the tolerance from the curve.
   const float dd = length({p0.x - 2 * c.x + p1.x, p0.y - 2 * c.y + p1.y});
-  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(dd / (4.0f * kFlattenTolerance)))), 1,
-                           kMaxCurveSegments);
+  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(dd / (4.0f * kFlattenTolerance)))),
+                           1, kMaxCurveSegments);
   Point prev = p0;
   for (int k = 1; k <= n; ++k) {
     const float t = static_cast<float>(k) / static_cast<float>(n), u = 1.0f - t;
-    const Point p{u * u * p0.x + 2 * u * t * c.x + t * t * p1.x, u * u * p0.y + 2 * u * t * c.y + t * t * p1.y};
+    const Point p{u * u * p0.x + 2 * u * t * c.x + t * t * p1.x,
+                  u * u * p0.y + 2 * u * t * c.y + t * t * p1.y};
     line(prev, p);
     prev = p;
   }
@@ -187,13 +190,14 @@ void Rasterizer::quad(Point p0, Point c, Point p1) {
 void Rasterizer::cubic(Point p0, Point c1, Point c2, Point p1) {
   const float dd = std::max(length({p0.x - 2 * c1.x + c2.x, p0.y - 2 * c1.y + c2.y}),
                             length({c1.x - 2 * c2.x + p1.x, c1.y - 2 * c2.y + p1.y}));
-  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(0.75f * dd / kFlattenTolerance))), 1,
-                           kMaxCurveSegments);
+  const int n = std::clamp(static_cast<int>(std::ceil(std::sqrt(0.75f * dd / kFlattenTolerance))),
+                           1, kMaxCurveSegments);
   Point prev = p0;
   for (int k = 1; k <= n; ++k) {
     const float t = static_cast<float>(k) / static_cast<float>(n), u = 1.0f - t;
     const float b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
-    const Point p{b0 * p0.x + b1 * c1.x + b2 * c2.x + b3 * p1.x, b0 * p0.y + b1 * c1.y + b2 * c2.y + b3 * p1.y};
+    const Point p{b0 * p0.x + b1 * c1.x + b2 * c2.x + b3 * p1.x,
+                  b0 * p0.y + b1 * c1.y + b2 * c2.y + b3 * p1.y};
     line(prev, p);
     prev = p;
   }

@@ -20,9 +20,12 @@ void attach(Widget& w, Window* window) {
 
 float ease(Easing e, float t) {
   switch (e) {
-    case Easing::linear: return t;
-    case Easing::ease_out: return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);  // cubic
-    case Easing::ease_in_out: return t < 0.5f ? 4 * t * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+    case Easing::linear:
+      return t;
+    case Easing::ease_out:
+      return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);  // cubic
+    case Easing::ease_in_out:
+      return t < 0.5f ? 4 * t * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
   }
   return t;
 }
@@ -44,9 +47,13 @@ Widget::~Widget() {
   detail::Registry::instance().release(id_);
 }
 
-Ref<Widget> Widget::parent() const { return parent_ ? Ref<Widget>::from_id(parent_->id()) : Ref<Widget>{}; }
+Ref<Widget> Widget::parent() const {
+  return parent_ ? Ref<Widget>::from_id(parent_->id()) : Ref<Widget>{};
+}
 
-Ref<Window> Widget::window() const { return window_ ? Ref<Window>::from_id(window_->id()) : Ref<Window>{}; }
+Ref<Window> Widget::window() const {
+  return window_ ? Ref<Window>::from_id(window_->id()) : Ref<Window>{};
+}
 
 Ref<Widget> Widget::child(size_t index) const {
   return index < children_.size() ? Ref<Widget>::from_id(children_[index]->id()) : Ref<Widget>{};
@@ -54,8 +61,9 @@ Ref<Widget> Widget::child(size_t index) const {
 
 void Widget::adopt(std::unique_ptr<Widget> child) {
   if (!accepts_children()) {
-    detail::contract_violation("add<T>() was called on a widget that takes no children; add to a Column, Row, "
-                               "Grid, Card or Window instead");
+    detail::contract_violation(
+        "add<T>() was called on a widget that takes no children; add to a Column, Row, "
+        "Grid, Card or Window instead");
   }
   if (const auto* ws = detail::window_state_of(*this); ws && ws->in_draw) {
     detail::contract_violation(
@@ -139,7 +147,7 @@ Size Widget::measure(Size) { return min_size_; }
 void Widget::arrange(Rect bounds) {
   if (bounds_ != bounds) invalidate();  // the old place
   bounds_ = bounds;
-  invalidate();                         // the new place
+  invalidate();  // the new place
 }
 
 void Widget::paint(Painter&) {}
@@ -184,7 +192,8 @@ void Widget::animate(Motion& m, float target, std::chrono::milliseconds duration
   m.start_ns = now;
   m.easing = easing;
   const bool instant = !ws || detail::app_state().system.reduced_motion;
-  m.duration_ns = instant ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+  m.duration_ns =
+      instant ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
   if (ws && m.duration_ns > 0) ws->animate_until(id_, m.start_ns + m.duration_ns);
   invalidate();
 }

@@ -24,7 +24,8 @@ constexpr float kMaxSnapStretch = 0.08f;
 constexpr int kUnbounded = 1 << 20;
 
 float x_height_scale(const Font& font, float size) {
-  const float x_height = static_cast<float>(font.metrics().x_height) * size / static_cast<float>(font.units_per_em());
+  const float x_height =
+      static_cast<float>(font.metrics().x_height) * size / static_cast<float>(font.units_per_em());
   const float snapped = std::round(x_height);
   if (snapped < 1.0f) return 1.0f;
   const float scale = snapped / x_height;
@@ -57,9 +58,12 @@ bool within_raster_limit(const Path& outline, const Transform& t) {
 
 const Font& FontSet::get(FontWeight weight) const {
   switch (weight) {
-    case FontWeight::medium: return *medium;
-    case FontWeight::semibold: return *semibold;
-    case FontWeight::regular: break;
+    case FontWeight::medium:
+      return *medium;
+    case FontWeight::semibold:
+      return *semibold;
+    case FontWeight::regular:
+      break;
   }
   return *regular;
 }
@@ -118,7 +122,9 @@ MaskView GlyphCache::get(const Font& font, uint16_t glyph, float size, int quart
           ? raster_.fill(outline_, t, {-kUnbounded, -kUnbounded, 2 * kUnbounded, 2 * kUnbounded})
           : MaskView{};  // drawn as nothing, like a damaged glyph
   Entry entry{key, m.x, m.y, m.w, m.h, {}};
-  if (!m.empty()) entry.coverage.assign(m.coverage, m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h));
+  if (!m.empty())
+    entry.coverage.assign(m.coverage,
+                          m.coverage + static_cast<size_t>(m.w) * static_cast<size_t>(m.h));
   bytes_ += cost(entry);
   lru_.push_front(std::move(entry));
   index_.emplace(key, lru_.begin());
@@ -146,8 +152,8 @@ float text_width(const Font& font, float size, std::string_view utf8) {
   return width;
 }
 
-float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size, Point origin, std::string_view utf8,
-                Color color, const TextTuning& tuning) {
+float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size, Point origin,
+                std::string_view utf8, Color color, const TextTuning& tuning) {
   const float scale = size / static_cast<float>(font.units_per_em());
   const float y_scale = tuning.snap_x_height ? x_height_scale(font, size) : 1.0f;
   const int baseline = static_cast<int>(std::lround(origin.y));
@@ -170,7 +176,8 @@ float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size,
   return pen;
 }
 
-std::vector<std::string_view> wrap_lines(const Font& font, float size, std::string_view utf8, float max_width) {
+std::vector<std::string_view> wrap_lines(const Font& font, float size, std::string_view utf8,
+                                         float max_width) {
   const float scale = size / static_cast<float>(font.units_per_em());
   std::vector<std::string_view> lines;
   size_t line_start = 0, last_space = std::string_view::npos, i = 0;
@@ -191,12 +198,14 @@ std::vector<std::string_view> wrap_lines(const Font& font, float size, std::stri
     size_t next = i;
     const char32_t cp = next_codepoint(utf8, next);
     const uint16_t g = font.glyph_index(cp);
-    const float w = static_cast<float>((prev ? font.kerning(prev, g) : 0) + font.advance(g)) * scale;
+    const float w =
+        static_cast<float>((prev ? font.kerning(prev, g) : 0) + font.advance(g)) * scale;
     if (is_space(cp)) last_space = i;
     // Spaces may hang past the edge; anything else that does not fit starts a new line, at the
     // last space if there is one, or between characters inside a word too long for a line.
     if (!is_space(cp) && width + w > max_width && i > line_start) {
-      const size_t end = last_space != std::string_view::npos && last_space > line_start ? last_space : i;
+      const size_t end =
+          last_space != std::string_view::npos && last_space > line_start ? last_space : i;
       lines.push_back(utf8.substr(line_start, end - line_start));
       size_t resume = end;
       while (resume < utf8.size() && (utf8[resume] == ' ' || utf8[resume] == '\t')) ++resume;

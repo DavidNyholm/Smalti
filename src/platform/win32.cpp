@@ -30,14 +30,15 @@ constexpr size_t kMaxWaitHandles = MAXIMUM_WAIT_OBJECTS - 1;
 // (a long job posting its next piece) must not keep windows from drawing.
 constexpr int kMaxMessagesPerTurn = 64;
 constexpr float kDefaultDpi = 96.0f;
-constexpr UINT_PTR kModalLoopTimer = 1;     // keeps frames coming while a window is dragged
+constexpr UINT_PTR kModalLoopTimer = 1;  // keeps frames coming while a window is dragged
 constexpr double kFallbackRefreshHz = 60.0;
-constexpr float kWheelLinePixels = 40.0f;   // one wheel notch of one line, in logical pixels
+constexpr float kWheelLinePixels = 40.0f;       // one wheel notch of one line, in logical pixels
 constexpr DWORD kDwmUseImmersiveDarkMode = 20;  // DWMWA_USE_IMMERSIVE_DARK_MODE
 
 std::wstring widen(std::string_view utf8) {
   if (utf8.empty()) return {};
-  const int n = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+  const int n =
+      MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
   std::wstring out(static_cast<size_t>(n), L'\0');
   MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), out.data(), n);
   return out;
@@ -62,35 +63,58 @@ Modifiers current_modifiers() {
 }
 
 Key map_key(WPARAM vk) {
-  if (vk >= 'A' && vk <= 'Z') return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(vk - 'A'));
-  if (vk >= '0' && vk <= '9') return static_cast<Key>(static_cast<int>(Key::digit0) + static_cast<int>(vk - '0'));
-  if (vk >= VK_F1 && vk <= VK_F12) return static_cast<Key>(static_cast<int>(Key::f1) + static_cast<int>(vk - VK_F1));
+  if (vk >= 'A' && vk <= 'Z')
+    return static_cast<Key>(static_cast<int>(Key::a) + static_cast<int>(vk - 'A'));
+  if (vk >= '0' && vk <= '9')
+    return static_cast<Key>(static_cast<int>(Key::digit0) + static_cast<int>(vk - '0'));
+  if (vk >= VK_F1 && vk <= VK_F12)
+    return static_cast<Key>(static_cast<int>(Key::f1) + static_cast<int>(vk - VK_F1));
   switch (vk) {
-    case VK_SPACE: return Key::space;
-    case VK_RETURN: return Key::enter;
-    case VK_ESCAPE: return Key::escape;
-    case VK_TAB: return Key::tab;
-    case VK_BACK: return Key::backspace;
-    case VK_DELETE: return Key::delete_;
-    case VK_LEFT: return Key::left;
-    case VK_RIGHT: return Key::right;
-    case VK_UP: return Key::up;
-    case VK_DOWN: return Key::down;
-    case VK_HOME: return Key::home;
-    case VK_END: return Key::end;
-    case VK_PRIOR: return Key::page_up;
-    case VK_NEXT: return Key::page_down;
-    default: return Key::unknown;
+    case VK_SPACE:
+      return Key::space;
+    case VK_RETURN:
+      return Key::enter;
+    case VK_ESCAPE:
+      return Key::escape;
+    case VK_TAB:
+      return Key::tab;
+    case VK_BACK:
+      return Key::backspace;
+    case VK_DELETE:
+      return Key::delete_;
+    case VK_LEFT:
+      return Key::left;
+    case VK_RIGHT:
+      return Key::right;
+    case VK_UP:
+      return Key::up;
+    case VK_DOWN:
+      return Key::down;
+    case VK_HOME:
+      return Key::home;
+    case VK_END:
+      return Key::end;
+    case VK_PRIOR:
+      return Key::page_up;
+    case VK_NEXT:
+      return Key::page_down;
+    default:
+      return Key::unknown;
   }
 }
 
 LPCWSTR cursor_resource(Cursor c) {
   switch (c) {
-    case Cursor::hand: return IDC_HAND;
-    case Cursor::text: return IDC_IBEAM;
-    case Cursor::resize_horizontal: return IDC_SIZEWE;
-    case Cursor::resize_vertical: return IDC_SIZENS;
-    case Cursor::arrow: break;
+    case Cursor::hand:
+      return IDC_HAND;
+    case Cursor::text:
+      return IDC_IBEAM;
+    case Cursor::resize_horizontal:
+      return IDC_SIZEWE;
+    case Cursor::resize_vertical:
+      return IDC_SIZENS;
+    case Cursor::arrow:
+      break;
   }
   return IDC_ARROW;
 }
@@ -100,7 +124,8 @@ using DwmSetAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
 DwmSetAttributeFn dwm_set_attribute() {
   static DwmSetAttributeFn fn = [] {
     const HMODULE m = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    return m ? reinterpret_cast<DwmSetAttributeFn>(GetProcAddress(m, "DwmSetWindowAttribute")) : nullptr;
+    return m ? reinterpret_cast<DwmSetAttributeFn>(GetProcAddress(m, "DwmSetWindowAttribute"))
+             : nullptr;
   }();
   return fn;
 }
@@ -108,10 +133,12 @@ DwmSetAttributeFn dwm_set_attribute() {
 double refresh_hz(HWND hwnd) {
   MONITORINFOEXW info{};
   info.cbSize = sizeof info;
-  if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &info)) return kFallbackRefreshHz;
+  if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &info))
+    return kFallbackRefreshHz;
   DEVMODEW mode{};
   mode.dmSize = sizeof mode;
-  if (!EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) || mode.dmDisplayFrequency <= 1) {
+  if (!EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) ||
+      mode.dmDisplayFrequency <= 1) {
     return kFallbackRefreshHz;
   }
   return mode.dmDisplayFrequency;
@@ -197,7 +224,8 @@ class Win32Backend final : public PlatformBackend {
   Win32Backend(Presentation presentation, BackendHost& host);
   ~Win32Backend() override;
 
-  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options, WindowEvents& events) override;
+  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options,
+                                              WindowEvents& events) override;
   void run() override;
   void quit() override { quit_ = true; }
   void wake() override;
@@ -267,8 +295,9 @@ LRESULT CALLBACK wake_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 Win32Window::Win32Window(Win32Backend& backend, const WindowOptions& options, WindowEvents& events)
     : backend_(backend), events_(events), min_size_(options.min_size) {
   cursor_ = LoadCursorW(nullptr, IDC_ARROW);
-  hwnd_ = CreateWindowExW(0, kWindowClass, widen(options.title).c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
-                          CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr, GetModuleHandleW(nullptr), this);
+  hwnd_ = CreateWindowExW(0, kWindowClass, widen(options.title).c_str(), WS_OVERLAPPEDWINDOW,
+                          CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr,
+                          nullptr, GetModuleHandleW(nullptr), this);
   if (!hwnd_) throw std::runtime_error("smalti: CreateWindowExW failed");
   try {
     // The size asked for is the client area in logical pixels, on whichever monitor the window
@@ -419,12 +448,15 @@ void Win32Window::set_cursor(Cursor c) {
   cursor_ = LoadCursorW(nullptr, cursor_resource(c));
   POINT p;
   RECT r;
-  if (GetCursorPos(&p) && ScreenToClient(hwnd_, &p) && GetClientRect(hwnd_, &r) && PtInRect(&r, p)) SetCursor(cursor_);
+  if (GetCursorPos(&p) && ScreenToClient(hwnd_, &p) && GetClientRect(hwnd_, &r) && PtInRect(&r, p))
+    SetCursor(cursor_);
 }
 
 void Win32Window::capture_mouse(bool capture) {
-  if (capture) SetCapture(hwnd_);
-  else if (GetCapture() == hwnd_) ReleaseCapture();
+  if (capture)
+    SetCapture(hwnd_);
+  else if (GetCapture() == hwnd_)
+    ReleaseCapture();
 }
 
 void Win32Window::set_dark_frame(bool dark) {
@@ -445,7 +477,9 @@ LRESULT Win32Window::dispatch(UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
-  const auto device_point = [&] { return Point{static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp))}; };
+  const auto device_point = [&] {
+    return Point{static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp))};
+  };
   switch (msg) {
     case WM_MOUSEMOVE:
       if (!tracking_leave_) {
@@ -462,14 +496,19 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN:
     case WM_MBUTTONDOWN: {
-      const MouseButton b = msg == WM_RBUTTONDOWN ? MouseButton::right : msg == WM_MBUTTONDOWN ? MouseButton::middle : MouseButton::left;
-      events_.on_mouse_button(b, true, device_point(), current_modifiers(), msg == WM_LBUTTONDBLCLK ? 2 : 1);
+      const MouseButton b = msg == WM_RBUTTONDOWN   ? MouseButton::right
+                            : msg == WM_MBUTTONDOWN ? MouseButton::middle
+                                                    : MouseButton::left;
+      events_.on_mouse_button(b, true, device_point(), current_modifiers(),
+                              msg == WM_LBUTTONDBLCLK ? 2 : 1);
       return 0;
     }
     case WM_LBUTTONUP:
     case WM_RBUTTONUP:
     case WM_MBUTTONUP: {
-      const MouseButton b = msg == WM_RBUTTONUP ? MouseButton::right : msg == WM_MBUTTONUP ? MouseButton::middle : MouseButton::left;
+      const MouseButton b = msg == WM_RBUTTONUP   ? MouseButton::right
+                            : msg == WM_MBUTTONUP ? MouseButton::middle
+                                                  : MouseButton::left;
       events_.on_mouse_button(b, false, device_point(), current_modifiers(), 1);
       return 0;
     }
@@ -483,7 +522,8 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       const float d = notches * static_cast<float>(lines) * kWheelLinePixels;
       // Windows reports wheel-up as positive; smalti's positive is down (content moves up).
       const Point delta = msg == WM_MOUSEWHEEL ? Point{0, -d} : Point{d, 0};
-      events_.on_mouse_wheel({static_cast<float>(p.x), static_cast<float>(p.y)}, delta, current_modifiers());
+      events_.on_mouse_wheel({static_cast<float>(p.x), static_cast<float>(p.y)}, delta,
+                             current_modifiers());
       return 0;
     }
     case WM_KEYDOWN:
@@ -492,8 +532,10 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SYSKEYUP: {
       const bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
       const Key k = map_key(wp);
-      if (k != Key::unknown) events_.on_key({k, down, down && (lp & (1 << 30)) != 0, current_modifiers()});
-      if (msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP) break;  // Alt+F4 and the system menu still work
+      if (k != Key::unknown)
+        events_.on_key({k, down, down && (lp & (1 << 30)) != 0, current_modifiers()});
+      if (msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP)
+        break;  // Alt+F4 and the system menu still work
       return 0;
     }
     case WM_SETFOCUS:
@@ -509,7 +551,8 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DPICHANGED: {
       scale_ = static_cast<float>(HIWORD(wp)) / kDefaultDpi;
       const RECT* r = reinterpret_cast<const RECT*>(lp);
-      SetWindowPos(hwnd_, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
+      SetWindowPos(hwnd_, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
       refresh_hz_ = refresh_hz(hwnd_);
       return 0;
     }
@@ -519,8 +562,10 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       break;
     case WM_GETMINMAXINFO: {
       auto* mm = reinterpret_cast<MINMAXINFO*>(lp);
-      RECT r{0, 0, static_cast<LONG>(min_size_.width * scale_), static_cast<LONG>(min_size_.height * scale_)};
-      AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, static_cast<UINT>(scale_ * kDefaultDpi));
+      RECT r{0, 0, static_cast<LONG>(min_size_.width * scale_),
+             static_cast<LONG>(min_size_.height * scale_)};
+      AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0,
+                               static_cast<UINT>(scale_ * kDefaultDpi));
       mm->ptMinTrackSize = {r.right - r.left, r.bottom - r.top};
       return 0;
     }
@@ -556,7 +601,8 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       HDC dc = BeginPaint(hwnd_, &ps);
       if (!gpu_ && dib_) {
         const RECT& r = ps.rcPaint;
-        BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, mem_dc_, r.left, r.top, SRCCOPY);
+        BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, mem_dc_, r.left, r.top,
+               SRCCOPY);
       }
       EndPaint(hwnd_, &ps);
       return 0;
@@ -646,7 +692,8 @@ void Win32Backend::on_wake_message() {
   }
 }
 
-std::unique_ptr<NativeWindow> Win32Backend::create_window(const WindowOptions& options, WindowEvents& events) {
+std::unique_ptr<NativeWindow> Win32Backend::create_window(const WindowOptions& options,
+                                                          WindowEvents& events) {
   adopt_gpu_if_ready();
   return std::make_unique<Win32Window>(*this, options, events);
 }
@@ -654,12 +701,14 @@ std::unique_ptr<NativeWindow> Win32Backend::create_window(const WindowOptions& o
 SystemInfo Win32Backend::system_info() const {
   SystemInfo info;
   DWORD light = 1, size = sizeof light;
-  if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                   L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS) {
+  if (RegGetValueW(
+          HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+          L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS) {
     info.dark_mode = light == 0;
   }
   BOOL animations = TRUE;
-  if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0)) info.reduced_motion = !animations;
+  if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0))
+    info.reduced_motion = !animations;
   return info;
 }
 
@@ -758,7 +807,8 @@ void Win32Backend::run() {
   }
 }
 
-std::unique_ptr<PlatformBackend> create_win32_backend(Presentation presentation, BackendHost& host) {
+std::unique_ptr<PlatformBackend> create_win32_backend(Presentation presentation,
+                                                      BackendHost& host) {
   return std::make_unique<Win32Backend>(presentation, host);
 }
 

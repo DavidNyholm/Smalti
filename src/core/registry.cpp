@@ -21,7 +21,9 @@ ContractHandler g_handler = &print_and_abort;
 
 }  // namespace
 
-void set_contract_handler(ContractHandler handler) { g_handler = handler ? handler : &print_and_abort; }
+void set_contract_handler(ContractHandler handler) {
+  g_handler = handler ? handler : &print_and_abort;
+}
 
 namespace detail {
 
@@ -32,8 +34,9 @@ namespace detail {
 }
 
 [[noreturn]] void dead_ref(WidgetId id) {
-  const std::string message = "a Ref was used after its widget was removed (slot " + std::to_string(id.slot) +
-                              ", generation " + std::to_string(id.generation) +
+  const std::string message = "a Ref was used after its widget was removed (slot " +
+                              std::to_string(id.slot) + ", generation " +
+                              std::to_string(id.generation) +
                               "). Test it with `if (ref)` when the widget may be gone.";
   contract_violation(message.c_str());
 }
@@ -87,7 +90,9 @@ Widget* Registry::find(WidgetId id) const {
 
 void Registry::check_thread() const {
   if (ui_thread_ && *ui_thread_ != std::this_thread::get_id()) {
-    contract_violation("smalti was called from a thread other than the UI thread; use App::post to run code there");
+    contract_violation(
+        "smalti was called from a thread other than the UI thread; use App::post to run code "
+        "there");
   }
 }
 

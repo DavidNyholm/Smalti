@@ -21,7 +21,9 @@ AppState::AppState(App& app_ref, const AppOptions& options)
     : app(app_ref),
       backend(platform::create_backend(options.backend, options.presentation, *this)),
       system(backend->system_info()),
-      theme(options.theme ? *options.theme : system.dark_mode ? theme_dark() : theme_light()),
+      theme(options.theme      ? *options.theme
+            : system.dark_mode ? theme_dark()
+                               : theme_light()),
       fonts(load_embedded_fonts()) {}
 
 AppState::~AppState() = default;
@@ -93,7 +95,8 @@ void AppState::flush_removals() {
 }
 
 void AppState::window_closed(Window* w) {
-  const auto it = std::find_if(windows.begin(), windows.end(), [&](const auto& p) { return p.get() == w; });
+  const auto it =
+      std::find_if(windows.begin(), windows.end(), [&](const auto& p) { return p.get() == w; });
   if (it == windows.end()) return;
   // Not destroyed here: the platform code that reported the close may still be on the stack.
   closing.push_back(std::move(*it));
@@ -206,7 +209,8 @@ MemoryStats App::memory_stats() const {
   m.glyph_cache_bytes = state_->glyphs.bytes();
   for (const auto& w : state_->windows) {
     const detail::WindowState& ws = w->state();
-    m.frame_buffer_bytes += static_cast<size_t>(ws.width_px) * static_cast<size_t>(ws.height_px) * sizeof(uint32_t);
+    m.frame_buffer_bytes +=
+        static_cast<size_t>(ws.width_px) * static_cast<size_t>(ws.height_px) * sizeof(uint32_t);
     m.glyph_cache_bytes += ws.canvas.cache_bytes();
     m.gpu_texture_bytes += ws.native->gpu_bytes();
   }

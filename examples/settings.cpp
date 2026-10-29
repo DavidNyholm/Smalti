@@ -1,7 +1,7 @@
 // The sample from docs/What-it-looks-like.md, built with the examples so the page cannot drift.
-#include <smalti/smalti.hpp>
-
 #include <string>
+
+#include <smalti/smalti.hpp>
 namespace sm = smalti;
 
 int main() {

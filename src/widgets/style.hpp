@@ -23,18 +23,21 @@ inline float measure_text(std::string_view text, const TextStyle& style) {
 
 inline float text_ascent(const TextStyle& style) {
   const Font& f = app_state().fonts.get(style.weight);
-  return static_cast<float>(f.metrics().ascender) * style.size / static_cast<float>(f.units_per_em());
+  return static_cast<float>(f.metrics().ascender) * style.size /
+         static_cast<float>(f.units_per_em());
 }
 
 inline float text_descent(const TextStyle& style) {
   const Font& f = app_state().fonts.get(style.weight);
-  return static_cast<float>(-f.metrics().descender) * style.size / static_cast<float>(f.units_per_em());
+  return static_cast<float>(-f.metrics().descender) * style.size /
+         static_cast<float>(f.units_per_em());
 }
 
 inline float text_line_height(const TextStyle& style) {
   const Font& f = app_state().fonts.get(style.weight);
   const LineMetrics& m = f.metrics();
-  return static_cast<float>(m.ascender - m.descender + m.line_gap) * style.size / static_cast<float>(f.units_per_em());
+  return static_cast<float>(m.ascender - m.descender + m.line_gap) * style.size /
+         static_cast<float>(f.units_per_em());
 }
 
 // The baseline that centres one line of `style` vertically in `r`.
@@ -43,13 +46,18 @@ inline float centered_baseline(Rect r, const TextStyle& style) {
   return r.y + (r.height - (a + d)) * 0.5f + a;
 }
 
-inline Color dim_if(bool disabled, Color c) { return disabled ? c.with_alpha(c.a * kDisabledAlpha) : c; }
+inline Color dim_if(bool disabled, Color c) {
+  return disabled ? c.with_alpha(c.a * kDisabledAlpha) : c;
+}
 
 inline void focus_ring(Painter& p, Rect r, float radius, const Theme& th) {
   const float g = kFocusRingGap;
-  p.stroke_rounded_rect({r.x - g, r.y - g, r.width + 2 * g, r.height + 2 * g}, radius + g, kFocusRingWidth, th.accent);
+  p.stroke_rounded_rect({r.x - g, r.y - g, r.width + 2 * g, r.height + 2 * g}, radius + g,
+                        kFocusRingWidth, th.accent);
 }
 
-inline TextStyle body_text(const Theme& th, FontWeight weight = FontWeight::regular) { return {th.text_body, weight}; }
+inline TextStyle body_text(const Theme& th, FontWeight weight = FontWeight::regular) {
+  return {th.text_body, weight};
+}
 
 }  // namespace smalti::detail

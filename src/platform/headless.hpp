@@ -53,7 +53,8 @@ class HeadlessBackend final : public PlatformBackend {
 
   explicit HeadlessBackend(BackendHost& host) : host_(host) {}
 
-  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options, WindowEvents& events) override;
+  std::unique_ptr<NativeWindow> create_window(const WindowOptions& options,
+                                              WindowEvents& events) override;
   void run() override;
   void quit() override { quit_ = true; }
   void wake() override { woken_ = true; }

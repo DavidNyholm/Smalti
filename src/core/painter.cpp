@@ -36,14 +36,16 @@ void Painter::stroke_rounded_rect(Rect r, float radius, float width, Color c) {
 
 void Painter::fill_circle(Point center, float radius, Color c) {
   const float s = s_.scale;
-  s_.canvas->fill_rounded_rect({(center.x - radius) * s, (center.y - radius) * s, 2 * radius * s, 2 * radius * s},
-                               radius * s, c);
+  s_.canvas->fill_rounded_rect(
+      {(center.x - radius) * s, (center.y - radius) * s, 2 * radius * s, 2 * radius * s},
+      radius * s, c);
 }
 
 void Painter::stroke_circle(Point center, float radius, float width, Color c) {
   const float s = s_.scale;
-  s_.canvas->stroke_rounded_rect({(center.x - radius) * s, (center.y - radius) * s, 2 * radius * s, 2 * radius * s},
-                                 radius * s, width * s, c);
+  s_.canvas->stroke_rounded_rect(
+      {(center.x - radius) * s, (center.y - radius) * s, 2 * radius * s, 2 * radius * s},
+      radius * s, width * s, c);
 }
 
 void Painter::polyline(std::span<const Point> points, float width, Color c) {
@@ -64,8 +66,8 @@ void Painter::vertical_gradient(Rect r, float radius, Color top, Color bottom) {
 float Painter::text(Point baseline, std::string_view utf8, const TextStyle& style, Color c) {
   const detail::Font& font = s_.fonts->get(style.weight);
   const float end = detail::draw_text(*s_.canvas, *s_.glyphs, font, style.size * s_.scale,
-                                      {baseline.x * s_.scale, std::round(baseline.y * s_.scale)}, utf8, c,
-                                      s_.theme->text_tuning);
+                                      {baseline.x * s_.scale, std::round(baseline.y * s_.scale)},
+                                      utf8, c, s_.theme->text_tuning);
   return end / s_.scale;
 }
 
@@ -75,18 +77,20 @@ float Painter::text_width(std::string_view utf8, const TextStyle& style) const {
 
 float Painter::ascent(const TextStyle& style) const {
   const detail::Font& f = s_.fonts->get(style.weight);
-  return static_cast<float>(f.metrics().ascender) * style.size / static_cast<float>(f.units_per_em());
+  return static_cast<float>(f.metrics().ascender) * style.size /
+         static_cast<float>(f.units_per_em());
 }
 
 float Painter::descent(const TextStyle& style) const {
   const detail::Font& f = s_.fonts->get(style.weight);
-  return static_cast<float>(-f.metrics().descender) * style.size / static_cast<float>(f.units_per_em());
+  return static_cast<float>(-f.metrics().descender) * style.size /
+         static_cast<float>(f.units_per_em());
 }
 
 float Painter::line_height(const TextStyle& style) const {
   const detail::Font& f = s_.fonts->get(style.weight);
-  return static_cast<float>(f.metrics().ascender - f.metrics().descender + f.metrics().line_gap) * style.size /
-         static_cast<float>(f.units_per_em());
+  return static_cast<float>(f.metrics().ascender - f.metrics().descender + f.metrics().line_gap) *
+         style.size / static_cast<float>(f.units_per_em());
 }
 
 void Painter::push_clip(Rect r) {
@@ -94,7 +98,8 @@ void Painter::push_clip(Rect r) {
   const int x0 = static_cast<int>(std::floor(r.x * s)), y0 = static_cast<int>(std::floor(r.y * s));
   const detail::RectI device{x0, y0, static_cast<int>(std::ceil(r.right() * s)) - x0,
                              static_cast<int>(std::ceil(r.bottom() * s)) - y0};
-  const detail::RectI clip = device.intersect(s_.clips.empty() ? s_.canvas->clip() : s_.clips.back());
+  const detail::RectI clip =
+      device.intersect(s_.clips.empty() ? s_.canvas->clip() : s_.clips.back());
   s_.clips.push_back(clip);
   s_.canvas->set_clip(clip);
 }
