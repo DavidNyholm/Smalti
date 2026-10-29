@@ -10,6 +10,7 @@
 #include <exception>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -23,6 +24,9 @@ namespace {
 constexpr wchar_t kWindowClass[] = L"smalti.window";
 constexpr wchar_t kWakeClass[] = L"smalti.wake";
 constexpr UINT kWakeMessage = WM_APP + 1;
+constexpr UINT_PTR kWakeTimer = 1;  // on the wake window: a wake that waits behind input
+// How soon a wake that could not be posted (a full queue) is posted again.
+constexpr int64_t kWakeRetry100ns = -100'000;  // 10 ms, relative
 // MsgWaitForMultipleObjectsEx takes at most this many handles (one fewer than the usual limit:
 // the message queue counts as one).
 constexpr size_t kMaxWaitHandles = MAXIMUM_WAIT_OBJECTS - 1;
@@ -242,7 +246,7 @@ class Win32Backend final : public PlatformBackend {
   // Runs every window's frame that is due; also from inside Windows' own modal loops.
   void run_due_frames();
   void on_wake_message();
-  void run_lost_wake();  // runs posted work whose wake message could not be posted
+  void retry_wake();  // from the thread pool: posts the wake that failed, or tries again later
 
  private:
   void adopt_gpu_if_ready();
@@ -255,10 +259,11 @@ class Win32Backend final : public PlatformBackend {
   // posted work keeps running while they spin.
   HWND wake_window_ = nullptr;
   std::atomic<bool> wake_posted_{false};
-  std::atomic<bool> wake_lost_{false};  // PostMessage failed (a full queue): the loop runs the work
-  // Signalled with wake_lost_, and part of every wait: unlike a message it cannot fail to be
-  // delivered, so the loop cannot go to sleep between a failed post and the flag being set.
-  HANDLE lost_wake_event_ = nullptr;
+  std::thread::id ui_thread_ = std::this_thread::get_id();
+  // Retries a wake whose PostMessage failed (a full queue) until it is posted. A thread-pool
+  // timer, armed only after a failure: a flag the UI thread checks would be missed by native
+  // modal loops (a message box), which never look at our flags.
+  PTP_TIMER wake_retry_ = nullptr;
   HANDLE frame_timer_ = nullptr;  // high resolution: paces CPU-path frames without spinning
   std::vector<Win32Window*> windows_;
   bool quit_ = false;
@@ -281,8 +286,13 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   return w ? w->dispatch(msg, wp, lp) : DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+void CALLBACK wake_retry_callback(PTP_CALLBACK_INSTANCE, void* backend, PTP_TIMER) {
+  static_cast<Win32Backend*>(backend)->retry_wake();
+}
+
 LRESULT CALLBACK wake_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-  if (msg == kWakeMessage) {
+  if (msg == WM_TIMER && wp == kWakeTimer) KillTimer(hwnd, kWakeTimer);
+  if (msg == kWakeMessage || (msg == WM_TIMER && wp == kWakeTimer)) {
     if (auto* b = reinterpret_cast<Win32Backend*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
       b->on_wake_message();
     return 0;
@@ -580,10 +590,7 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
       KillTimer(hwnd_, kModalLoopTimer);
       return 0;
     case WM_TIMER:
-      if (wp == kModalLoopTimer) {
-        backend_.run_lost_wake();
-        backend_.run_due_frames();  // every window, not just this one
-      }
+      if (wp == kModalLoopTimer) backend_.run_due_frames();  // every window, not just this one
       return 0;
     case WM_CAPTURECHANGED:
       events_.on_capture_lost();  // also after our own release; the core ignores that one
@@ -640,46 +647,68 @@ Win32Backend::Win32Backend(Presentation presentation, BackendHost& host) : host_
     frame_timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);  // before Windows 10 1803
   wake_window_ = CreateWindowExW(0, kWakeClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                  wc.hInstance, nullptr);
-  lost_wake_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-  if (!frame_timer_ || !wake_window_ || !lost_wake_event_) {
+  wake_retry_ = CreateThreadpoolTimer(&wake_retry_callback, this, nullptr);
+  if (!frame_timer_ || !wake_window_ || !wake_retry_) {
     if (frame_timer_) CloseHandle(frame_timer_);
     if (wake_window_) DestroyWindow(wake_window_);
-    if (lost_wake_event_) CloseHandle(lost_wake_event_);
+    if (wake_retry_) CloseThreadpoolTimer(wake_retry_);
     throw std::runtime_error("smalti: cannot create the event loop's handles");
   }
   SetWindowLongPtrW(wake_window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
   if (presentation == Presentation::automatic) {
     // The device costs hundreds of milliseconds on some drivers; the first frames do not wait.
-    gpu_thread_ = std::thread([this] {
-      gpu_pending_ = GpuDevice::create();
-      gpu_done_ = true;
-      wake();
-    });
+    try {
+      gpu_thread_ = std::thread([this] {
+        try {
+          gpu_pending_ = GpuDevice::create();
+        } catch (...) {
+          gpu_pending_ = nullptr;  // out of memory, or a driver failure: stay on the CPU path
+        }
+        gpu_done_ = true;
+        wake();
+      });
+    } catch (const std::system_error&) {
+      gpu_done_ = true;  // no thread to make the device on: the CPU path, which already works
+    }
   }
 }
 
 Win32Backend::~Win32Backend() {
   if (gpu_thread_.joinable()) gpu_thread_.join();
+  SetThreadpoolTimer(wake_retry_, nullptr, 0, 0);  // no new retries, then wait out a running one
+  WaitForThreadpoolTimerCallbacks(wake_retry_, TRUE);
+  CloseThreadpoolTimer(wake_retry_);
   DestroyWindow(wake_window_);  // a wake still queued for it is dropped with it
   CloseHandle(frame_timer_);
-  CloseHandle(lost_wake_event_);
 }
 
 void Win32Backend::wake() {
+  // Posted work posting more from the UI thread while input or painting waits: a timer instead
+  // of a message. Every message loop, native dialogs' included, hands out posted messages
+  // before input and timers after it, so a job that keeps posting cannot keep the mouse and
+  // keyboard waiting, here or under a message box.
+  if (std::this_thread::get_id() == ui_thread_ &&
+      HIWORD(GetQueueStatus(QS_INPUT | QS_PAINT)) != 0) {
+    SetTimer(wake_window_, kWakeTimer, USER_TIMER_MINIMUM, nullptr);
+    return;
+  }
   // One message in the queue is enough however many wakes there are; on_wake drains all work.
   if (wake_posted_.exchange(true)) return;
   if (!PostMessageW(wake_window_, kWakeMessage, 0, 0)) {
-    // A full queue. The work must not wait for another post that may never come: the loop
-    // (and the modal-loop timer) checks this flag after the messages it is about to handle.
+    // A full queue. The work must not wait for another post that may never come.
     wake_posted_ = false;
-    wake_lost_ = true;
-    SetEvent(lost_wake_event_);
+    FILETIME due{static_cast<DWORD>(kWakeRetry100ns), static_cast<DWORD>(kWakeRetry100ns >> 32)};
+    SetThreadpoolTimer(wake_retry_, &due, 0, 0);
   }
 }
 
-void Win32Backend::run_lost_wake() {
-  if (wake_lost_.exchange(false)) on_wake_message();
+void Win32Backend::retry_wake() {
+  if (wake_posted_.exchange(true)) return;  // something else posted one meanwhile
+  if (PostMessageW(wake_window_, kWakeMessage, 0, 0)) return;
+  wake_posted_ = false;
+  FILETIME due{static_cast<DWORD>(kWakeRetry100ns), static_cast<DWORD>(kWakeRetry100ns >> 32)};
+  SetThreadpoolTimer(wake_retry_, &due, 0, 0);  // still full: once more, later
 }
 
 void Win32Backend::on_wake_message() {
@@ -756,8 +785,8 @@ void Win32Backend::run() {
   while (!quit_) {
     // Wait for: a message (input, or a wake), the CPU-path frame timer, or a GPU window's swap
     // chain ready for its frame.
-    handles.assign(1, lost_wake_event_);
-    owners.assign(1, nullptr);
+    handles.clear();
+    owners.clear();
     const int64_t now = now_ns();
     int64_t due = INT64_MAX;
     for (Win32Window* w : windows_) {
@@ -796,7 +825,6 @@ void Win32Backend::run() {
     // keyboard input, so a job that keeps posting would otherwise keep input waiting.
     dispatch_messages(PM_QS_INPUT);
     dispatch_messages(0);
-    run_lost_wake();
     run_due_frames();
     host_.after_events();
   }

@@ -26,6 +26,14 @@ struct RectI {
   friend bool operator==(const RectI&, const RectI&) = default;
 };
 
+// The furthest device coordinate the canvas works with. Edges further out are clamped to it, so
+// a rectangle's right and bottom (x + w) cannot overflow an int, whatever a widget asks to draw.
+inline constexpr int kMaxDeviceCoord = 1 << 24;
+
+// The device rectangle between the given edges, clamped to the working range. A NaN edge gives
+// an empty rectangle.
+RectI rect_from_edges(double x0, double y0, double x1, double y1);
+
 // x' = sx * x + tx, y' = sy * y + ty. Glyphs need no more than scale, flip and offset.
 struct Transform {
   float sx = 1, sy = 1, tx = 0, ty = 0;

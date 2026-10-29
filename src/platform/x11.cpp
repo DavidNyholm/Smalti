@@ -370,6 +370,8 @@ void X11Window::handle(XEvent& e) {
         }
         break;
       }
+      // Back, forward and other extra buttons are not used yet (Windows ignores them too).
+      if (b != Button1 && b != Button2 && b != Button3) break;
       const MouseButton button = b == Button1   ? MouseButton::left
                                  : b == Button3 ? MouseButton::right
                                                 : MouseButton::middle;

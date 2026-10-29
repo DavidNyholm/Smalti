@@ -6,6 +6,8 @@
 namespace smalti::detail {
 
 namespace {
+// Edges flatter than this are skipped: their area is far below anything visible.
+constexpr float kMinEdgeHeight = 1e-6f;
 
 // Maximum distance, in device pixels, between a curve and the segments that replace it.
 // Chords lie inside the curve, so round shapes lose up to this much along their edge; at a
@@ -32,10 +34,8 @@ MaskView Rasterizer::fill(const Path& path, const Transform& t, RectI clip) {
     x1 = std::max(x1, d.x);
     y1 = std::max(y1, d.y);
   }
-  const int ix0 = static_cast<int>(std::floor(x0)), iy0 = static_cast<int>(std::floor(y0));
-  const RectI bounds{ix0, iy0, static_cast<int>(std::ceil(x1)) - ix0,
-                     static_cast<int>(std::ceil(y1)) - iy0};
-  const RectI area = bounds.intersect(clip);
+  const RectI area =
+      rect_from_edges(std::floor(x0), std::floor(y0), std::ceil(x1), std::ceil(y1)).intersect(clip);
   if (area.empty()) return {};
   reset(area);
 
@@ -120,7 +120,10 @@ void Rasterizer::line(Point a, Point b) {
 }
 
 void Rasterizer::accumulate_line(Point p0, Point p1) {
-  if (p0.y == p1.y) return;
+  // An edge this flat covers no measurable area, and its slope (dx / dy) would overflow; a
+  // non-finite point cannot be placed at all. Written so that NaN is skipped too.
+  if (!(std::fabs(p1.y - p0.y) >= kMinEdgeHeight)) return;
+  if (!std::isfinite(p0.x) || !std::isfinite(p1.x)) return;
   float dir = 1.0f;
   if (p0.y > p1.y) {
     std::swap(p0, p1);
@@ -129,8 +132,9 @@ void Rasterizer::accumulate_line(Point p0, Point p1) {
   const float dxdy = (p1.x - p0.x) / (p1.y - p0.y);
   const float w = static_cast<float>(area_.w);
   const float y_start = std::max(p0.y, 0.0f);
+  if (y_start >= static_cast<float>(area_.h) || p1.y <= 0.0f) return;
   float x = p0.x + (y_start - p0.y) * dxdy;
-  const int row_end = std::min(area_.h, static_cast<int>(std::ceil(p1.y)));
+  const int row_end = static_cast<int>(std::min<double>(area_.h, std::ceil(double{p1.y})));
   for (int row = static_cast<int>(y_start); row < row_end; ++row) {
     float* cells = &acc_[static_cast<size_t>(row) * static_cast<size_t>(stride_)];
     const float dy =

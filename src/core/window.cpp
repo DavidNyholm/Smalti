@@ -18,11 +18,9 @@ namespace {
 constexpr size_t kMaxDirtyRects = 8;
 
 RectI to_device(const Rect& r, float scale) {
-  const int x0 = static_cast<int>(std::floor(r.x * scale)),
-            y0 = static_cast<int>(std::floor(r.y * scale));
-  const int x1 = static_cast<int>(std::ceil(r.right() * scale)),
-            y1 = static_cast<int>(std::ceil(r.bottom() * scale));
-  return {x0, y0, x1 - x0, y1 - y0};
+  return rect_from_edges(std::floor(double{r.x} * scale), std::floor(double{r.y} * scale),
+                         std::ceil(double{r.right()} * scale),
+                         std::ceil(double{r.bottom()} * scale));
 }
 
 bool overlaps(const RectI& a, const RectI& b) {
@@ -239,6 +237,9 @@ void WindowState::set_hovered(Widget* w) {
   Widget* old = find(hovered);
   hovered = id;
   if (old) old->on_hover_changed(false);
+  // The old widget's hook may have moved the hover on, or hidden w: then w never had it, and
+  // the nested call has already set the cursor.
+  if (hovered != id) return;
   if (w) w->on_hover_changed(true);
   if (native) native->set_cursor(w && w->enabled() ? w->cursor() : Cursor::arrow);
 }
@@ -257,6 +258,7 @@ void WindowState::cancel_press() {
   if (pressed == WidgetId{}) return;
   Widget* w = find(pressed);
   pressed = {};  // first: releasing the capture can report the loss straight back
+  ++press_serial;
   if (native) native->capture_mouse(false);
   if (w) {
     w->on_mouse({MouseEvent::Kind::cancel, last_mouse, MouseButton::none, {}, {}, 1});
@@ -325,6 +327,7 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
         captured = nullptr;
       }
       pressed = {};
+      ++press_serial;
       native->capture_mouse(false);
       if (captured) {
         captured->on_mouse(e);
@@ -344,6 +347,7 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
       focus_target = Tree::parent_of(*focus_target);
     }
     focus(focus_target);
+    const uint64_t interaction = press_serial;
     for (Widget* w = target; w; w = Tree::parent_of(*w)) {
       if (!eligible(*w)) continue;
       // The press is this widget's while its handler runs, so hiding, disabling or removing it
@@ -351,16 +355,14 @@ void WindowState::on_mouse_button(MouseButton button, bool down, Point device, M
       pressed = w->id();
       pressed_button = button;
       const bool taken = w->on_mouse(e);
-      const bool still_ours = pressed == w->id();
+      if (press_serial != interaction) break;  // nested dispatch ended it: it goes no further
       if (!taken) {
-        if (still_ours) pressed = {};
+        pressed = {};
         continue;
       }
-      if (still_ours) {
-        native->capture_mouse(true);
-        w->invalidate();
-        if (!eligible(*w)) cancel_press();
-      }
+      native->capture_mouse(true);
+      w->invalidate();
+      if (!eligible(*w)) cancel_press();
       break;
     }
   });

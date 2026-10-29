@@ -13,7 +13,7 @@ namespace {
 constexpr float kUnbounded = 1e9f;
 // Rounds for spanning grid children that share columns to settle, and the shortfall below which
 // a span counts as fitting.
-constexpr int kSpanRounds = 4;
+constexpr int kSpanRounds = 64;
 constexpr float kSpanSlack = 0.01f;
 
 // The shared logic of Column and Row, written once along a "main" axis.
@@ -226,10 +226,10 @@ std::vector<float> Grid::column_widths(const std::vector<Cell>& cells, float wid
       for (size_t c = sp.first; c < sp.last; ++c) {
         if (content_sized(c)) widths[c] += extra;
       }
+      result = shared_out();  // the next span sees what this one took
       grew = true;
     }
-    if (!grew) break;
-    result = shared_out();
+    if (!grew) break;  // every span fits
   }
   return result;
 }

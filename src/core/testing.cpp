@@ -26,6 +26,16 @@ platform::HeadlessBackend& backend() {
 
 Point device(Ref<Window> w, Point p) { return {p.x * w->scale(), p.y * w->scale()}; }
 
+// A callback that threw during a driver call fails that call, as it would fail App::run(): a test
+// must not pass while one failed.
+void rethrow_failure() {
+  detail::AppState& s = detail::app_state();
+  if (!s.pending_exception) return;
+  const std::exception_ptr e = s.pending_exception;
+  s.pending_exception = nullptr;
+  std::rethrow_exception(e);
+}
+
 }  // namespace
 
 Driver::Driver(Ref<Window> window) : window_(window) {
@@ -36,16 +46,19 @@ Driver::Driver(Ref<Window> window) : window_(window) {
 void Driver::move(Point p) {
   native(window_).events().on_mouse_move(device(window_, p), {});
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::press(Point p, MouseButton button) {
   native(window_).events().on_mouse_button(button, true, device(window_, p), {}, 1);
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::release(Point p, MouseButton button) {
   native(window_).events().on_mouse_button(button, false, device(window_, p), {}, 1);
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::click(Point p) {
@@ -62,27 +75,32 @@ void Driver::click(Ref<Widget> widget) {
 void Driver::wheel(Point p, Point delta) {
   native(window_).events().on_mouse_wheel(device(window_, p), delta, {});
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::key(Key k, Modifiers modifiers) {
   native(window_).events().on_key({k, true, false, modifiers});
   if (window_) native(window_).events().on_key({k, false, false, modifiers});
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::resize(Size logical, float scale) {
   native(window_).resize(logical, scale);
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::advance(std::chrono::milliseconds time) {
   backend().advance(std::chrono::duration_cast<std::chrono::nanoseconds>(time).count());
+  rethrow_failure();
 }
 
 void Driver::frame() {
   if (!window_) return;
   native(window_).run_frame(backend().now_ns());
   backend().host().after_events();
+  rethrow_failure();
 }
 
 void Driver::idle() { backend().host().after_events(); }

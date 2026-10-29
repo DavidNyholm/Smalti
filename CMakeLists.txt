@@ -75,6 +75,10 @@ function(smalti_strict target)
   endif()
 endfunction()
 smalti_strict(smalti)
+# The library's objects are instrumented, so whatever links it needs the runtime too.
+if(SMALTI_SANITIZE AND NOT MSVC)
+  target_link_options(smalti INTERFACE -fsanitize=address,undefined,float-cast-overflow)
+endif()
 # The generated font arrays are data, not code worth warning about.
 set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp" PROPERTIES SKIP_LINTING ON)
 
@@ -105,6 +109,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review.cpp
     tests/test_review2.cpp
     tests/test_review3.cpp
+    tests/test_review4.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_widgets.cpp)

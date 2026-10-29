@@ -113,8 +113,9 @@ bool Button::on_mouse(const MouseEvent& e) {
 
 bool Button::on_key(const KeyEvent& e) {
   if (!activates(e)) return false;
-  // A brief press so the keyboard click is visible, then the action.
-  press_.from = 1;
+  // A brief press so the keyboard click is visible, then the action. The motion is set fully
+  // pressed first: animate() starts from the motion's current value.
+  press_ = Motion{1, 1, 0, 0, press_.easing};
   animate(press_, 0.0f, theme().motion_base);
   click();
   return true;
@@ -292,10 +293,13 @@ void RadioButton::select() {
 }
 
 void RadioButton::set_selected(bool selected, bool notify) {
-  if (selected == selected_) return;
-  selected_ = selected;
-  animate(dot_, selected ? 1.0f : 0.0f, theme().motion_fast);
+  const bool changed = selected != selected_;
+  if (changed) {
+    selected_ = selected;
+    animate(dot_, selected ? 1.0f : 0.0f, theme().motion_fast);
+  }
   if (!selected) return;
+  // Also when it was selected already: a group built with two selected settles here.
   // The rest of the group lets go.
   if (Widget* group = parent().try_get()) {
     for (auto& sibling : group->children()) {
@@ -303,7 +307,7 @@ void RadioButton::set_selected(bool selected, bool notify) {
         radio->set_selected(false, false);
     }
   }
-  if (notify && on_select_) on_select_();
+  if (changed && notify && on_select_) on_select_();
 }
 
 // Only a selection the keyboard can reach counts: with the selected radio hidden or disabled,

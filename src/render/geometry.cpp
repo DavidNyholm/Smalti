@@ -1,6 +1,7 @@
 #include "render/geometry.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace smalti::detail {
 
@@ -8,6 +9,15 @@ namespace {
 // Cubic Bezier control-point distance that approximates a quarter circle of radius 1.
 constexpr float kCircleKappa = 0.5522847498f;
 }  // namespace
+
+RectI rect_from_edges(double x0, double y0, double x1, double y1) {
+  if (std::isnan(x0) || std::isnan(y0) || std::isnan(x1) || std::isnan(y1)) return {};
+  const auto edge = [](double v) {
+    return static_cast<int>(std::clamp(v, -double{kMaxDeviceCoord}, double{kMaxDeviceCoord}));
+  };
+  const int left = edge(x0), top = edge(y0);
+  return {left, top, std::max(0, edge(x1) - left), std::max(0, edge(y1) - top)};
+}
 
 RectI RectI::intersect(const RectI& o) const {
   const int x0 = std::max(x, o.x), y0 = std::max(y, o.y);

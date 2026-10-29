@@ -143,8 +143,7 @@ TEST(review2_adding_a_widget_while_painting_is_a_contract_violation) {
   App app(headless());
   auto win = app.open_window({"t", {200, 100}});
   win->add<Column>()->add<PaintAdds>();
-  testing::Driver d(win);
-  CHECK(throws_contract([&] { app.run(); }));  // the violation inside the frame comes out of run()
+  CHECK(throws_contract([&] { testing::Driver d(win); }));  // the violation inside its first frame
 }
 
 TEST(review2_changing_a_wrapped_label_while_painting_reads_no_freed_text) {
@@ -225,11 +224,18 @@ TEST(review2_a_giant_glyph_is_not_rasterized) {
 TEST(review2_a_paint_exception_does_not_lose_damage) {
   App app(headless(&theme_light()));
   auto win = app.open_window({"t", {200, 100}});
+  testing::Driver d(win);
   auto col = win->add<Column>(StackOptions{.spacing = 10, .padding = Insets::all(10)});
   auto thrower = col->add<ThrowsOnce>();
   auto other = col->add<Box>(Size{20, 10});
-  testing::Driver d(win);  // the first frame throws inside ThrowsOnce
-  other->invalidate();     // a small, unrelated change afterwards
+  bool threw = false;
+  try {
+    d.frame();  // throws inside ThrowsOnce
+  } catch (const std::runtime_error&) {
+    threw = true;
+  }
+  CHECK(threw);
+  other->invalidate();  // a small, unrelated change afterwards
   d.frame();
   d.frame();
   const Point c = thrower->bounds().center();

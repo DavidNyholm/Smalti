@@ -109,6 +109,7 @@ struct WindowState final : platform::WindowEvents {
 
   WidgetId hovered, pressed, focused;
   MouseButton pressed_button = MouseButton::none;  // the button that started the press
+  uint64_t press_serial = 0;   // moves on whenever a press ends, so nested dispatch can be seen
   bool keyboard_mode = false;  // focus rings show only while navigating by keyboard
   bool window_focused = true;
   Point last_mouse{-1, -1};

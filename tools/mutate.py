@@ -167,9 +167,13 @@ MUTATIONS = [
         "a press its own handler cancelled is captured anyway",
         [
             (
-                "      if (still_ours) {\n        native->capture_mouse(true);",
-                "      if (true) {\n        pressed = w->id();\n        native->capture_mouse(true);",
-            )
+                "      if (press_serial != interaction) break;  // nested dispatch ended it: it goes no further\n",
+                "",
+            ),
+            (
+                "      native->capture_mouse(true);\n      w->invalidate();\n      if (!eligible(*w)) cancel_press();",
+                "      pressed = w->id();\n      native->capture_mouse(true);\n      w->invalidate();\n      if (!eligible(*w)) cancel_press();",
+            ),
         ],
     ),
     (
@@ -197,6 +201,66 @@ MUTATIONS = [
             )
         ],
     ),
+    (
+        "core/window.cpp",
+        "a press that nested dispatch ended bubbles on to the parent",
+        [
+            (
+                "      if (press_serial != interaction) break;  // nested dispatch ended it: it goes no further\n",
+                "",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "a widget is told it gained the hover after the hover moved on",
+        [("  if (hovered != id) return;\n", "")],
+    ),
+    (
+        "core/layout.cpp",
+        "spanning children are measured against stale column widths",
+        [("      result = shared_out();  // the next span sees what this one took\n", "")],
+    ),
+    (
+        "core/testing.cpp",
+        "the test driver swallows exceptions from callbacks",
+        [
+            (
+                "  if (!s.pending_exception) return;\n  const std::exception_ptr e",
+                "  return;\n  const std::exception_ptr e",
+            )
+        ],
+    ),
+    (
+        "core/painter.cpp",
+        "a zero-width border grows with the scale",
+        [
+            (
+                "  const float w = width > 0 ? width * s_.scale : 1.0f;",
+                "  const float w = width > 0 ? width * s_.scale : std::max(1.0f, std::floor(s_.scale));",
+            )
+        ],
+    ),
+    (
+        "render/canvas.cpp",
+        "the shadow corner cache never evicts",
+        [("  while (shadow_bytes_ > kShadowCacheBudget && shadow_lru_.size() > 1) {", "  while (false) {")],
+    ),
+    (
+        "widgets/controls.cpp",
+        "selecting an already selected radio leaves a second selection in place",
+        [
+            (
+                "  if (!selected) return;\n  // Also when it was selected already",
+                "  if (!selected || !changed) return;\n  // Also when it was selected already",
+            )
+        ],
+    ),
+    (
+        "widgets/controls.cpp",
+        "a keyboard click shows no press",
+        [("  press_ = Motion{1, 1, 0, 0, press_.easing};", "  press_.from = 1;")],
+    ),
     # Layout
     (
         "core/layout.cpp",
@@ -207,10 +271,7 @@ MUTATIONS = [
         "core/layout.cpp",
         "stretch factors get no leftover space",
         [
-            (
-                "if (total_stretch > 0 && child->stretch() > 0) main_len += extra * child->stretch() / total_stretch;",
-                "if (total_stretch > 0 && child->stretch() > 0) main_len += 0;",
-            )
+            ("      main_len += extra * child->stretch() / total_stretch;", "      main_len += 0;"),
         ],
     ),
     (
@@ -218,19 +279,16 @@ MUTATIONS = [
         "justify end is ignored",
         [
             (
-                "    else if (o.justify == Align::end) pos += extra;",
-                "    else if (o.justify == Align::end) pos += 0;",
-            )
+                "    else if (o.justify == Align::end)\n      pos += extra;",
+                "    else if (o.justify == Align::end)\n      pos += 0;",
+            ),
         ],
     ),
     (
         "core/layout.cpp",
         "centred children sit at the start",
         [
-            (
-                "      case Align::center: cross_pos += (inner_cross - cross_len) * 0.5f; break;",
-                "      case Align::center: break;",
-            )
+            ("        cross_pos += (inner_cross - cross_len) * 0.5f;\n", ""),
         ],
     ),
     (
@@ -278,10 +336,7 @@ MUTATIONS = [
         "widgets/controls.cpp",
         "selecting a radio button leaves the others selected",
         [
-            (
-                "radio && radio != this) radio->set_selected(false, false);",
-                "radio && radio != this) (void)radio;",
-            )
+            ("        radio->set_selected(false, false);", "        (void)radio;"),
         ],
     ),
     (
@@ -304,9 +359,9 @@ MUTATIONS = [
         "the slider ignores its step",
         [
             (
-                "  if (options_.step > 0) v = options_.min + std::round((v - options_.min) / options_.step) * options_.step;\n",
+                "  if (options_.step > 0)\n    v = options_.min + std::round((v - options_.min) / options_.step) * options_.step;\n",
                 "",
-            )
+            ),
         ],
     ),
     (
@@ -314,9 +369,9 @@ MUTATIONS = [
         "Home jumps to the maximum",
         [
             (
-                "    case Key::home: change(options_.min); return true;",
-                "    case Key::home: change(options_.max); return true;",
-            )
+                "    case Key::home:\n      change(options_.min);",
+                "    case Key::home:\n      change(options_.max);",
+            ),
         ],
     ),
     (
@@ -339,10 +394,7 @@ MUTATIONS = [
         "core/window.cpp",
         "animations never end, so an idle window keeps drawing",
         [
-            (
-                "if (!w || !w->visible() || frame_time >= it->second) it = animating.erase(it);",
-                "if (!w) it = animating.erase(it);",
-            )
+            ("    if (!w || !w->visible() || frame_time >= it->second)", "    if (!w)"),
         ],
     ),
     (
@@ -432,9 +484,9 @@ MUTATIONS = [
         "wrapping breaks mid-word instead of at the last space",
         [
             (
-                "const size_t end = last_space != std::string_view::npos && last_space > line_start ? last_space : i;",
-                "const size_t end = i;",
-            )
+                "          last_space != std::string_view::npos && last_space > line_start ? last_space : i;",
+                "          i;",
+            ),
         ],
     ),
     (

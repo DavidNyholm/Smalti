@@ -50,7 +50,8 @@ bool within_raster_limit(const Path& outline, const Transform& t) {
   // area (a degenerate glyph has none). Written so that NaN fails too.
   const double reach = kUnbounded;
   if (!(x0 >= -reach && x1 <= reach && y0 >= -reach && y1 <= reach)) return false;
-  const double area = (x1 - x0 + 1) * (y1 - y0 + 1);
+  // The rows and columns the rasterizer allocates: whole pixels, plus its slack column.
+  const double area = (std::ceil(x1) - std::floor(x0) + 2) * (std::ceil(y1) - std::floor(y0) + 1);
   return std::isfinite(area) && area <= kMaxGlyphPixels;
 }
 
@@ -156,12 +157,14 @@ float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size,
                 std::string_view utf8, Color color, const TextTuning& tuning) {
   const float scale = size / static_cast<float>(font.units_per_em());
   const float y_scale = tuning.snap_x_height ? x_height_scale(font, size) : 1.0f;
+  if (!(std::fabs(origin.y) < kMaxDeviceCoord)) return origin.x;  // nowhere near the canvas
   const int baseline = static_cast<int>(std::lround(origin.y));
   float pen = origin.x;
   uint16_t prev = 0;
   for (size_t i = 0; i < utf8.size();) {
     const uint16_t g = font.glyph_index(next_codepoint(utf8, i));
     if (prev) pen += static_cast<float>(font.kerning(prev, g)) * scale;
+    if (!(std::fabs(pen) < kMaxDeviceCoord)) break;  // the rest of the line is off the canvas too
     int whole = static_cast<int>(std::floor(pen));
     int quarter = static_cast<int>(std::lround((pen - static_cast<float>(whole)) * kSubpixelSteps));
     if (quarter == kSubpixelSteps) {

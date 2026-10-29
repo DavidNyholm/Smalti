@@ -30,7 +30,7 @@ void Painter::fill_rounded_rect(Rect r, float radius, Color c) {
 }
 
 void Painter::stroke_rounded_rect(Rect r, float radius, float width, Color c) {
-  const float w = width > 0 ? width * s_.scale : std::max(1.0f, std::floor(s_.scale));
+  const float w = width > 0 ? width * s_.scale : 1.0f;  // 0: one device pixel at any scale
   s_.canvas->stroke_rounded_rect(snap(r, s_.scale), radius * s_.scale, w, c);
 }
 
@@ -95,9 +95,9 @@ float Painter::line_height(const TextStyle& style) const {
 
 void Painter::push_clip(Rect r) {
   const float s = s_.scale;
-  const int x0 = static_cast<int>(std::floor(r.x * s)), y0 = static_cast<int>(std::floor(r.y * s));
-  const detail::RectI device{x0, y0, static_cast<int>(std::ceil(r.right() * s)) - x0,
-                             static_cast<int>(std::ceil(r.bottom() * s)) - y0};
+  const detail::RectI device =
+      detail::rect_from_edges(std::floor(double{r.x} * s), std::floor(double{r.y} * s),
+                              std::ceil(double{r.right()} * s), std::ceil(double{r.bottom()} * s));
   const detail::RectI clip =
       device.intersect(s_.clips.empty() ? s_.canvas->clip() : s_.clips.back());
   s_.clips.push_back(clip);

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <list>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -59,7 +60,8 @@ class Canvas {
 
  private:
   void blend_mask(MaskView mask, Color c);
-  const std::vector<float>& shadow_corner(float sigma, float corner, int size);
+  // The cached corner of a blurred box, or nullptr if it is too big to keep (drawn directly).
+  const std::vector<float>* shadow_corner(float sigma, float corner, int size);
 
   PixelBuffer target_;
   RectI clip_;
@@ -67,7 +69,15 @@ class Canvas {
   Path path_;  // reused by every shape, so drawing does not allocate
   std::vector<float> shadow_cols_, shadow_rows_;
   // One corner of a blurred rounded box, shared by every shadow with the same blur and radius.
-  std::unordered_map<uint64_t, std::vector<float>> shadow_corners_;
+  // Least recently used first out, within a byte budget: an animated blur makes a new tile every
+  // frame, and keeping them all would grow without end.
+  struct CornerTile {
+    uint64_t key;
+    std::vector<float> values;
+  };
+  std::list<CornerTile> shadow_lru_;  // most recently used first
+  std::unordered_map<uint64_t, std::list<CornerTile>::iterator> shadow_index_;
+  size_t shadow_bytes_ = 0;
 };
 
 }  // namespace smalti::detail
