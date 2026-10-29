@@ -683,42 +683,62 @@ MUTATIONS = [
     (
         "theme/widgets_section.cpp",
         "round 6: unknown widget properties join the duplicate check",
-        [('      const bool known = s || find_property(*schema_, state, m.key);', '      const bool known = true;')],
+        [
+            (
+                "      const bool known = s || find_property(*schema_, state, m.key);",
+                "      const bool known = true;",
+            )
+        ],
     ),
     (
         "platform/read_file_win32.cpp",
         "round 6: a theme file may be a pipe or a device",
-        [('  if (GetFileType(file.get()) != FILE_TYPE_DISK) return {ReadStatus::not_a_file, {}};\n', '')],
+        [("  if (GetFileType(file.get()) != FILE_TYPE_DISK) return {ReadStatus::not_a_file, {}};\n", "")],
     ),
     (
         "platform/backend.cpp",
         "round 6: any positive dpi is trusted",
-        [('!std::isfinite(dpi) || dpi < kMinDpi || dpi > kMaxDpi', 'dpi <= 0')],
+        [("!std::isfinite(dpi) || dpi < kMinDpi || dpi > kMaxDpi", "dpi <= 0")],
     ),
     (
         "render/canvas.cpp",
         "round 6: fill_rect takes colours out of range",
-        [('void Canvas::fill_rect(RectF r, Color c) {\n  c = unit(c);\n', 'void Canvas::fill_rect(RectF r, Color c) {\n')],
+        [
+            (
+                "void Canvas::fill_rect(RectF r, Color c) {\n  c = unit(c);\n",
+                "void Canvas::fill_rect(RectF r, Color c) {\n",
+            )
+        ],
     ),
     (
         "theme/widget_styles.cpp",
         "round 6: the hover tint may pass opaque",
-        [('th.hover.with_alpha(std::min(1.0f, th.hover.a * kHoverTintStrength))', 'th.hover.with_alpha(th.hover.a * kHoverTintStrength)')],
+        [
+            (
+                "th.hover.with_alpha(std::min(1.0f, th.hover.a * kHoverTintStrength))",
+                "th.hover.with_alpha(th.hover.a * kHoverTintStrength)",
+            )
+        ],
     ),
     (
         "theme/widget_styles.cpp",
         "round 6: the switch's hover knob mixes straight",
-        [('blend_colors(rest(s, S::knob), th.text, kSwitchKnobHoverMix)', 'Color::mix(rest(s, S::knob), th.text, kSwitchKnobHoverMix)')],
+        [
+            (
+                "blend_colors(rest(s, S::knob), th.text, kSwitchKnobHoverMix)",
+                "Color::mix(rest(s, S::knob), th.text, kSwitchKnobHoverMix)",
+            )
+        ],
     ),
     (
         "widgets/controls.cpp",
         "round 6: a button is never taller than size.control",
-        [('std::max(th.control_height, detail::text_line_height(st))', 'th.control_height')],
+        [("std::max(th.control_height, detail::text_line_height(st))", "th.control_height")],
     ),
     (
         "theme/theme.cpp",
         "round 6: a loop is placed at the base theme's tokens",
-        [('      from_file[i] = true;\n', '')],
+        [("      from_file[i] = true;\n", "")],
     ),
     (
         "theme/jsonc.cpp",
@@ -728,37 +748,52 @@ MUTATIONS = [
     (
         "theme/theme.cpp",
         "round 6: other errors hide reference loops",
-        [('  Resolver resolver(exprs, from_file, errors);', '  if (errors.any()) return std::nullopt;\n  Resolver resolver(exprs, from_file, errors);')],
+        [
+            (
+                "  Resolver resolver(exprs, from_file, errors);",
+                "  if (errors.any()) return std::nullopt;\n  Resolver resolver(exprs, from_file, errors);",
+            )
+        ],
+    ),
+    (
+        "platform/backend.cpp",
+        "round 6: a NaN window size reaches lround",
+        [("  if (!(v >= 1)) return 1;  // also NaN", "  if (v < 1) return 1;")],
+    ),
+    (
+        "render/canvas.cpp",
+        "round 6: shapes take colours out of range",
+        [("  if (m.empty()) return;\n  c = unit(c);\n", "  if (m.empty()) return;\n")],
     ),
     (
         "core/widget.cpp",
         "a redraw delay too long for the clock overflows",
-        [('delay.count() > INT64_MAX - now ? INT64_MAX : now + delay.count()', 'now + delay.count()')],
+        [("delay.count() > INT64_MAX - now ? INT64_MAX : now + delay.count()", "now + delay.count()")],
     ),
     (
         "core/window.cpp",
         "a later timed redraw replaces an earlier one",
-        [('      when = std::min(when, time_ns);', '      when = time_ns;')],
+        [("      when = std::min(when, time_ns);", "      when = time_ns;")],
     ),
     (
         "platform/headless.cpp",
         "the headless clock never runs timed work",
-        [('    host_.run_timers(now_);\n', '')],
+        [("    host_.run_timers(now_);\n", "")],
     ),
     (
         "core/app.cpp",
         "a theme reloads at once instead of after the pause",
-        [('backend->now_ns() + kThemeReloadDelayNs', 'backend->now_ns()')],
+        [("backend->now_ns() + kThemeReloadDelayNs", "backend->now_ns()")],
     ),
     (
         "platform/file_watch_win32.cpp",
         "any file changing in the folder reloads the theme",
-        [('    changed = s.names_file(bytes);', '    changed = true;')],
+        [("    changed = s.names_file(bytes);", "    changed = true;")],
     ),
     (
         "core/app.cpp",
         "stopping the theme watch leaves the folder watched",
-        [('  backend->stop_watching_file();\n', '')],
+        [("  backend->stop_watching_file();\n", "")],
     ),
 ]
 

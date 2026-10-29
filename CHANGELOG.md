@@ -4,7 +4,7 @@ Semantic versioning; during 0.x, any version may change the API, and every chang
 
 ## Unreleased (in `beta`, for 0.2)
 
-Theme files, the first part of 0.2: a theme is a file in JSON with comments, read by a loader of the library's own that reports every error with its line and column and never half-applies a theme, and it can restyle single widgets as well as the shared colours and sizes. [Themes](docs/Themes.md) describes the format. Live reload is still to come.
+Theme files, the first part of 0.2: a theme is a file in JSON with comments, read by a loader of the library's own that reports every error with its line and column and never half-applies a theme, and it can restyle single widgets as well as the shared colours and sizes; a running app reapplies it whenever the file is saved. [Themes](docs/Themes.md) describes the format.
 
 - New: `parse_theme()` and `load_theme()`, returning a `ThemeLoad` (the theme, and a `ThemeError` for each problem); `Theme` and `TextTuning` compare with `==`.
 - New: widget styles. A theme file's `widgets` section sets colours, radii and a disabled opacity per widget, variant and state (hover, pressed, checked, focused, disabled); `Theme::widget_styles` holds them as `StyleRule` values. Every built-in widget now draws through its style, whose defaults are the 0.1 look: the gallery draws the same pixels.
@@ -15,10 +15,19 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
 - New: `gallery <file.jsonc>` opens the gallery in a theme file's theme and restyles it on every save.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.
-- Fixed (review round 6): a theme file must be a regular file (a FIFO could block the loader forever) and is read to its end; X11 ignores an `Xft.dpi` that is not a finite number from 24 to 960 (`inf` reached undefined integer conversions); window sizes from `WindowOptions` are converted safely whatever their value; the canvas clamps colours outside 0 to 1 instead of drawing wrong ones; a lone carriage return ends a line in a theme file.
+- Fixed (review round 6, besides the three fixes 0.1.2 shipped): a theme file must be a regular file (a FIFO could block the loader forever) and is read to its end; a lone carriage return ends a line in a theme file.
 - Changed: a button is at least as tall as its text, which a theme's font size can make taller than `size.control`.
 - Build: `cmake/embed_fonts.cmake` became `cmake/embed_files.cmake`, which embeds the themes too.
-- Fixed: the 0.1.1 release still called itself 0.1.0 in its CMake package, so `find_package(smalti 0.1.1)` refused it (`find_package(smalti 0.1)` was not affected).
+
+## 0.1.2 (2026-10-30)
+
+Three fixes from review round 6. That round reviewed the theme work for 0.2, and these defects in it were older than that work, so 0.1 has them too; [How it is checked](docs/How-it-is-checked.md) lists them. No API changes.
+
+- X11 ignores an `Xft.dpi` setting that is not a finite number from 24 to 960. A setting of `inf` was taken as an infinite scale, which reached integer conversions that are undefined for it: windows opened at 0 by 0 logical pixels.
+- Window sizes from `WindowOptions` (and their minimum sizes) are converted to device pixels safely on every backend, whatever their value: NaN or an infinite or enormous size opens a window between 1 and 32768 pixels instead of reaching an undefined conversion.
+- The canvas clamps every colour it draws to the range 0 to 1 (NaN to 0). A colour outside it, from a custom widget or from a theme whose hover colour is opaque (a button's hover tint is half again as strong), was packed into a wrong colour.
+- The CMake package reports this version; 0.1.1's still said 0.1.0, so `find_package(smalti 0.1.1)` refused it.
+- Tests: the Release build of the tests compiles without a warning again, and the test runner's allocation counter replaces the nothrow `operator new` too, which AddressSanitizer otherwise reports as a mismatch once a test path uses it.
 
 ## 0.1.1 (2026-10-29)
 

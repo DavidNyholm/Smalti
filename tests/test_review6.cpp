@@ -32,8 +32,15 @@ bool contains(std::string_view s, std::string_view part) {
 class Swatch : public Widget {
  public:
   Color color;
+  float radius = 0;  // above 0, a shape: drawn through coverage, not as a plain rectangle
   Size measure(Size) override { return {20, 20}; }
-  void paint(Painter& p) override { p.fill_rect(bounds(), color); }
+  void paint(Painter& p) override {
+    if (radius > 0) {
+      p.fill_rounded_rect(bounds(), radius, color);
+    } else {
+      p.fill_rect(bounds(), color);
+    }
+  }
 };
 
 }  // namespace
@@ -126,6 +133,29 @@ TEST(review6_colours_past_their_range_draw_clamped) {
   swatch->invalidate();
   d.frame();
   CHECK_EQ(d.pixel(x, y) & 0xFFFFFF, 0x00FFFFu);
+  // Shapes take the other path into the canvas, through coverage; it clamps the same way.
+  swatch->color = {2, -1, 0.5f, 1.5f};
+  swatch->radius = 4;
+  swatch->invalidate();
+  d.frame();
+  CHECK_EQ(d.pixel(x, y) & 0xFFFFFF, 0xFF0080u);
+}
+
+// Finding 5 as a theme meets it: a secondary button's hover tint is the theme's hover colour,
+// half again as opaque, so an opaque hover colour gave an alpha of 1.5.
+TEST(review6_an_opaque_hover_colour_tints_as_itself) {
+  Theme th = theme_dark();
+  th.hover = Color::hex(0xFFFFFF);
+  App app(headless(&th));
+  auto win = app.open_window({"t", {200, 100}});
+  auto button = win->add<Column>(StackOptions{0, Insets::all(20), Align::start, Align::start})
+                    ->add<Button>("Hover", ButtonVariant::secondary);
+  testing::Driver d(win);
+  d.move(button->bounds().center());
+  d.advance(1s);
+  const Rect b = button->bounds();
+  CHECK_EQ(d.pixel(static_cast<int>(b.x + 3), static_cast<int>(b.center().y)) & 0xFFFFFF,
+           0xFFFFFFu);
 }
 
 // Finding 6: the switch's default hover knob mixed straight from the resting knob, so a
