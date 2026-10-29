@@ -1,0 +1,54 @@
+// Dark: very dark grey, the default dark theme. Kind to LCDs, where pure black glows grey or
+// smears. Built into the library; a theme of your own can start from it with "base": "dark"
+// and list only what it changes. docs/Themes.md describes every token.
+{
+  "name": "Dark",
+  "base": "none",  // a built-in theme sets every token itself
+  "tokens": {
+    // Surfaces, from the window frame inwards.
+    "surface.titlebar": "#121316",
+    "surface.sidebar": "#16171a",
+    "surface.background": "#1b1c20",
+    "surface.raised": "#222328",
+    "line.border": "#ffffff 7%",
+    "line.divider": "#ffffff 6%",
+    "state.hover": "#ffffff 4%",
+    "state.selected": "#ffffff 8%",
+
+    "text.primary": "#e7e7ea",
+    "text.secondary": "#a3a4ad",
+    "text.muted": "#6e7079",
+
+    "accent": "#5b8cf0",
+    "accent.hover": "#6e9af2",
+    "accent.on": "#ffffff",
+    "accent.soft": "accent 18%",
+
+    "status.success": "#3dbb7e",
+    "status.warning": "#e0a23b",
+    "status.danger": "#e5544b",
+
+    // Depth: a soft shadow where it can be seen, a top highlight where it cannot (true black).
+    "depth.shadows": true,
+    "depth.shadow": "#000000 35%",
+    "depth.highlight": "#ffffff 0%",
+
+    "radius.control": 8,
+    "radius.card": 12,
+    "size.control": 34,
+
+    "font.caption": 12,
+    "font.body": 14,
+    "font.title": 18,
+    "font.heading": 24,
+
+    "motion.fast": "120ms",
+    "motion.base": "200ms",
+
+    "text.blend": "adaptive",
+    "text.contrast": 0.1,
+    "text.snap": true,
+
+    "dark": true,  // asks the platform for a dark window frame
+  },
+}

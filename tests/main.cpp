@@ -29,17 +29,32 @@ std::atomic<bool>& enabled() {
 }
 }  // namespace alloc_count
 
-// Replacing the global allocation functions lets a test count what a code path allocates.
-void* operator new(std::size_t size) {
+namespace {
+
+void* counted_malloc(std::size_t size) {
   if (alloc_count::enabled().load(std::memory_order_relaxed)) {
     alloc_count::count().fetch_add(1);
     alloc_count::bytes().fetch_add(static_cast<long long>(size));
   }
-  if (void* p = std::malloc(size ? size : 1)) return p;
+  return std::malloc(size ? size : 1);
+}
+
+}  // namespace
+
+// Replacing the global allocation functions lets a test count what a code path allocates. Every
+// form that pairs with these deletes is replaced, the nothrow one too (std::stable_sort uses it):
+// under AddressSanitizer an unreplaced form comes from the sanitizer, which then reports our
+// free() of its memory as a mismatch.
+void* operator new(std::size_t size) {
+  if (void* p = counted_malloc(size)) return p;
   throw std::bad_alloc();
+}
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+  return counted_malloc(size);
 }
 void operator delete(void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
 
 #if defined(_MSC_VER)
 namespace {
@@ -53,10 +68,12 @@ constexpr int kRuntimeCheckFailed = 3;
 void fail_fast_on_runtime_checks() {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#if defined(_DEBUG)  // the report functions exist only in the debug runtime
   for (const int type : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
     _CrtSetReportMode(type, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(type, _CRTDBG_FILE_STDERR);
   }
+#endif
   _set_invalid_parameter_handler([](const wchar_t*, const wchar_t*, const wchar_t*, unsigned int,
                                     uintptr_t) {
     std::fputs("smalti tests: the C runtime rejected an argument (an invalid parameter)\n", stderr);

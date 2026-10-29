@@ -534,6 +534,102 @@ MUTATIONS = [
             )
         ],
     ),
+    # Theme files
+    (
+        "theme/jsonc.cpp",
+        "the theme reader accepts nesting deeper than its limit",
+        [
+            (
+                "  bool read_object(JsonValue& out, int depth) {\n    out.kind = JsonKind::object;\n    if (depth > kMaxJsonDepth) return fail(too_deep());",
+                "  bool read_object(JsonValue& out, int depth) {\n    out.kind = JsonKind::object;\n    if (depth > kMaxJsonDepth * 4) return fail(too_deep());",
+            )
+        ],
+    ),
+    (
+        "theme/jsonc.cpp",
+        "the theme reader takes strings of any length",
+        [("      if (out.size() > kMaxJsonStringBytes)", "      if (false)")],
+    ),
+    (
+        "theme/jsonc.cpp",
+        "the theme reader takes any number of values",
+        [("    if (++values_ > kMaxJsonValues)", "    if (++values_ > kMaxJsonValues * 64)")],
+    ),
+    (
+        "theme/jsonc.cpp",
+        "the theme reader takes overlong UTF-8",
+        [("  if (cp < smallest || cp > 0x10FFFF", "  if (cp > 0x10FFFF")],
+    ),
+    (
+        "theme/jsonc.cpp",
+        "theme error columns count bytes instead of characters",
+        [
+            (
+                "      i_ += utf8_length(s_, i_);\n      ++pos_.column;",
+                "      pos_.column += static_cast<int>(utf8_length(s_, i_));\n      i_ += utf8_length(s_, i_);",
+            )
+        ],
+    ),
+    (
+        "theme/jsonc.cpp",
+        "a trailing comma in a theme object is refused",
+        [
+            (
+                "        if (peek() == '}') {  // a trailing comma\n          step();\n          return true;\n        }\n",
+                "",
+            )
+        ],
+    ),
+    (
+        "theme/tokens.cpp",
+        "a theme opacity replaces a hex colour's own alpha",
+        [("e.literal.color = c->with_alpha(c->a * opacity);", "e.literal.color = c->with_alpha(opacity);")],
+    ),
+    (
+        "theme/tokens.cpp",
+        "theme sizes are not range-checked",
+        [("        if (!(v.number >= k.min && v.number <= k.max)) {", "        if (false) {")],
+    ),
+    (
+        "theme/tokens.cpp",
+        "a negative theme duration is accepted",
+        [('!= "ms" || ms < 0 ||', '!= "ms" ||')],
+    ),
+    (
+        "theme/tokens.cpp",
+        "theme suggestions miss two swapped letters",
+        [
+            (
+                "      if (i > 1 && j > 1 && lower(a[i - 1]) == lower(b[j - 2]) &&",
+                "      if (false && lower(a[i - 1]) == lower(b[j - 2]) &&",
+            )
+        ],
+    ),
+    (
+        "theme/tokens.hpp",
+        "theme errors are not capped",
+        [("    if (list_.size() < kMaxThemeErrors) {", "    if (true) {")],
+    ),
+    (
+        "theme/theme.cpp",
+        "a theme reference with an opacity ignores the opacity",
+        [("      values_[i].color.a *= e.opacity;\n", "")],
+    ),
+    (
+        "theme/theme.cpp",
+        "a theme token set twice is not reported",
+        [("      errors.add(m.pos, set_twice(m.key, *seen[*i]));\n      continue;", "      continue;")],
+    ),
+    (
+        "theme/theme.cpp",
+        "a theme with errors still replaces the base",
+        [
+            (
+                "    out.theme = builtin_theme(doc.base == Base::none ? Base::dark : doc.base);",
+                "    out.theme = theme_black();",
+            )
+        ],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

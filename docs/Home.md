@@ -6,6 +6,7 @@ smalti is a C++20 GUI library for desktop applications that look like current ap
 - [What it looks like](What-it-looks-like.md): the API in a few lines, and screenshots
 - [Widgets](Widgets.md): every control in v0.1 and how it behaves
 - [Layout](Layout.md): Column, Row, Grid, Spacer and Card
+- [Themes](Themes.md): theme files: the format, every token, and how errors are reported
 - [Events and threading](Events-and-threading.md): the event loop, callbacks, `post()`, motion
 - [Memory and safety](Memory-and-safety.md): `Ref<T>`, removal, what is and is not promised
 - [Text and fonts](Text-and-fonts.md): Inter, the TrueType reader, how text is drawn

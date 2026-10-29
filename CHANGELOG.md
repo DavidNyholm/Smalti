@@ -2,6 +2,16 @@
 
 Semantic versioning; during 0.x, any version may change the API, and every change that does is listed here.
 
+## Unreleased (in `beta`, for 0.2)
+
+Theme files, the first part of 0.2: a theme is a file in JSON with comments, read by a loader of the library's own that reports every error with its line and column and never half-applies a theme. [Themes](docs/Themes.md) describes the format. Widget styles and live reload are still to come.
+
+- New: `parse_theme()` and `load_theme()`, returning a `ThemeLoad` (the theme, and a `ThemeError` for each problem); `Theme` and `TextTuning` compare with `==`.
+- New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
+- New: `gallery <file.jsonc>` opens the gallery in a theme file's theme.
+- Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.
+- Build: `cmake/embed_fonts.cmake` became `cmake/embed_files.cmake`, which embeds the themes too.
+
 ## 0.1.1 (2026-10-29)
 
 Fixes from review rounds 4 and 5, on the released 0.1.0, among them a memory-safety defect (drawing far outside the window could write outside the frame buffer); [How it is checked](docs/How-it-is-checked.md) lists them all. Two findings about grid spans that overlap across fit columns are left for 0.2. The changes that show in the API or on screen:

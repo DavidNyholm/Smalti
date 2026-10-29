@@ -33,7 +33,8 @@ inline sm::Ref<sm::Card> titled_card(sm::Ref<sm::Row> row, const char* title) {
   return card;
 }
 
-inline void build_sidebar(sm::App& app, sm::Ref<Sidebar> side) {
+// `file_theme`, when given, is listed after the built-in themes.
+inline void build_sidebar(sm::App& app, sm::Ref<Sidebar> side, const sm::Theme* file_theme) {
   side->add<sm::Label>("smalti", sm::LabelOptions{.role = sm::TextRole::title});
   side->add<sm::Label>("Gallery, v0.1", sm::LabelOptions{.role = sm::TextRole::caption});
   side->add<sm::Spacer>(0.0f, 16.0f);
@@ -44,8 +45,10 @@ inline void build_sidebar(sm::App& app, sm::Ref<Sidebar> side) {
   side->add<sm::Label>("Theme", sm::LabelOptions{.role = sm::TextRole::caption});
   auto themes = side->add<sm::Column>(sm::StackOptions{.spacing = 8});
   const sm::Theme* current = &app.theme();
-  for (const sm::Theme* t : {&sm::theme_dark(), &sm::theme_black(), &sm::theme_light()}) {
-    auto radio = themes->add<sm::RadioButton>(t->name, t->name == current->name);
+  for (const sm::Theme* t :
+       {&sm::theme_dark(), &sm::theme_black(), &sm::theme_light(), file_theme}) {
+    if (!t) continue;
+    auto radio = themes->add<sm::RadioButton>(t->name, *t == *current);
     radio->on_select([&app, t] { app.set_theme(*t); });
   }
 }
@@ -121,9 +124,9 @@ inline void build_content(sm::App& app, sm::Ref<sm::Column> content) {
 namespace gallery {
 
 // Fills `win` with the whole gallery.
-inline void build(sm::App& app, sm::Ref<sm::Window> win) {
+inline void build(sm::App& app, sm::Ref<sm::Window> win, const sm::Theme* file_theme = nullptr) {
   auto root = win->add<sm::Row>();
-  build_sidebar(app, root->add<Sidebar>());
+  build_sidebar(app, root->add<Sidebar>(), file_theme);
   auto content =
       root->add<sm::Column>(sm::StackOptions{.spacing = 20, .padding = sm::Insets::all(32)});
   content->set_stretch(1);

@@ -1,0 +1,52 @@
+// Black: true black for OLED screens, where a black pixel is switched off. A shadow on pure
+// black cannot be seen, so depth comes from borders and a faint top highlight instead.
+// Built into the library; docs/Themes.md describes every token.
+{
+  "name": "Black",
+  "base": "none",  // a built-in theme sets every token itself
+  "tokens": {
+    "surface.titlebar": "#000000",
+    "surface.sidebar": "#000000",
+    "surface.background": "#000000",
+    "surface.raised": "#0d0e10",
+    "line.border": "#ffffff 9%",
+    "line.divider": "#ffffff 8%",
+    "state.hover": "#ffffff 5%",
+    "state.selected": "#ffffff 9%",
+
+    "text.primary": "#e3e3e6",  // off-white: easier on the eyes at OLED contrast
+    "text.secondary": "#9c9da6",
+    "text.muted": "#63656e",
+
+    "accent": "#5585e8",
+    "accent.hover": "#6892ec",
+    "accent.on": "#ffffff",
+    "accent.soft": "accent 18%",
+
+    "status.success": "#35a86f",
+    "status.warning": "#d49a35",
+    "status.danger": "#db4f46",
+
+    "depth.shadows": false,
+    "depth.shadow": "#000000 0%",
+    "depth.highlight": "#ffffff 5%",
+
+    "radius.control": 8,
+    "radius.card": 12,
+    "size.control": 34,
+
+    "font.caption": 12,
+    "font.body": 14,
+    "font.title": 18,
+    "font.heading": 24,
+
+    "motion.fast": "120ms",
+    "motion.base": "200ms",
+
+    "text.blend": "adaptive",
+    "text.contrast": 0.1,
+    "text.snap": true,
+
+    "dark": true,
+  },
+}

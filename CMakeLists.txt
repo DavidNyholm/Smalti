@@ -6,15 +6,24 @@ project(smalti
   LANGUAGES CXX)
 
 include(GNUInstallDirs)
-include(cmake/embed_fonts.cmake)
+include(cmake/embed_files.cmake)
 
 option(SMALTI_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
 option(SMALTI_BUILD_TESTS "Build the tests and register them with CTest" ${PROJECT_IS_TOP_LEVEL})
+option(SMALTI_BUILD_TOOLS "Build smalti-theme, the theme file checker" ${PROJECT_IS_TOP_LEVEL})
 option(SMALTI_HEADLESS_ONLY "Build without the Win32 or X11 backend (windows draw into memory)" OFF)
 option(SMALTI_SANITIZE "Build our targets with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(SMALTI_INSTALL "Generate install rules and a smaltiConfig.cmake" ${PROJECT_IS_TOP_LEVEL})
 
-smalti_embed_fonts("${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp")
+set(smalti_generated "${CMAKE_CURRENT_BINARY_DIR}/generated")
+smalti_embed_files("${smalti_generated}/inter_fonts.cpp"
+  kInterRegular "${PROJECT_SOURCE_DIR}/fonts/Inter-Regular.ttf"
+  kInterMedium "${PROJECT_SOURCE_DIR}/fonts/Inter-Medium.ttf"
+  kInterSemiBold "${PROJECT_SOURCE_DIR}/fonts/Inter-SemiBold.ttf")
+smalti_embed_files("${smalti_generated}/builtin_themes.cpp"
+  kThemeDark "${PROJECT_SOURCE_DIR}/themes/dark.jsonc"
+  kThemeBlack "${PROJECT_SOURCE_DIR}/themes/black.jsonc"
+  kThemeLight "${PROJECT_SOURCE_DIR}/themes/light.jsonc")
 
 add_library(smalti STATIC
   src/core/app.cpp
@@ -22,7 +31,6 @@ add_library(smalti STATIC
   src/core/painter.cpp
   src/core/registry.cpp
   src/core/testing.cpp
-  src/core/theme.cpp
   src/core/widget.cpp
   src/core/window.cpp
   src/platform/backend.cpp
@@ -33,10 +41,14 @@ add_library(smalti STATIC
   src/render/geometry.cpp
   src/render/raster.cpp
   src/render/text.cpp
+  src/theme/jsonc.cpp
+  src/theme/theme.cpp
+  src/theme/tokens.cpp
   src/widgets/controls.cpp
   src/widgets/label.cpp
   src/widgets/range.cpp
-  "${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp")
+  "${smalti_generated}/inter_fonts.cpp"
+  "${smalti_generated}/builtin_themes.cpp")
 add_library(smalti::smalti ALIAS smalti)
 target_compile_features(smalti PUBLIC cxx_std_20)
 target_include_directories(smalti
@@ -79,8 +91,9 @@ smalti_strict(smalti)
 if(SMALTI_SANITIZE AND NOT MSVC)
   target_link_options(smalti INTERFACE -fsanitize=address,undefined,float-cast-overflow)
 endif()
-# The generated font arrays are data, not code worth warning about.
-set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/generated/inter_fonts.cpp" PROPERTIES SKIP_LINTING ON)
+# The generated arrays are data, not code worth warning about.
+set_source_files_properties("${smalti_generated}/inter_fonts.cpp" "${smalti_generated}/builtin_themes.cpp"
+  PROPERTIES SKIP_LINTING ON)
 
 if(SMALTI_BUILD_EXAMPLES)
   foreach(example hello gallery settings)
@@ -98,11 +111,24 @@ if(SMALTI_BUILD_EXAMPLES)
   smalti_strict(screenshots)
 endif()
 
+if(SMALTI_BUILD_TOOLS)
+  add_executable(smalti-theme tools/smalti_theme.cpp)
+  target_link_libraries(smalti-theme PRIVATE smalti::smalti)
+  smalti_strict(smalti-theme)
+  if(WIN32)
+    target_compile_definitions(smalti-theme PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    if(MINGW)
+      target_link_options(smalti-theme PRIVATE -municode)  # its entry point is wmain
+    endif()
+  endif()
+endif()
+
 if(SMALTI_BUILD_TESTS)
   enable_testing()
   add_executable(smalti_tests
     tests/main.cpp
     tests/test_font.cpp
+    tests/test_jsonc.cpp
     tests/test_layout.cpp
     tests/test_memory.cpp
     tests/test_raster.cpp
@@ -113,6 +139,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review5.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
+    tests/test_theme.cpp
     tests/test_widgets.cpp)
   target_link_libraries(smalti_tests PRIVATE smalti::smalti)
   target_include_directories(smalti_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests)
@@ -125,6 +152,9 @@ if(SMALTI_INSTALL)
   include(CMakePackageConfigHelpers)
   install(DIRECTORY include/smalti DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   install(TARGETS smalti EXPORT smaltiTargets)
+  if(SMALTI_BUILD_TOOLS)
+    install(TARGETS smalti-theme)
+  endif()
   install(EXPORT smaltiTargets NAMESPACE smalti:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/smalti)
   write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/smaltiConfigVersion.cmake"
     VERSION ${PROJECT_VERSION} COMPATIBILITY SameMinorVersion)

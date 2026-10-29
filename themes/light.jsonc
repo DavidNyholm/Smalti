@@ -1,0 +1,51 @@
+// Light: near-white surfaces with soft shadows. Built into the library; docs/Themes.md
+// describes every token.
+{
+  "name": "Light",
+  "base": "none",  // a built-in theme sets every token itself
+  "tokens": {
+    "surface.titlebar": "#eeeff2",
+    "surface.sidebar": "#f3f4f6",
+    "surface.background": "#fafafb",
+    "surface.raised": "#ffffff",
+    "line.border": "#000000 9%",
+    "line.divider": "#000000 7%",
+    "state.hover": "#000000 4%",
+    "state.selected": "#000000 7%",
+
+    "text.primary": "#1a1b1f",
+    "text.secondary": "#5b5d66",
+    "text.muted": "#8c8e97",
+
+    "accent": "#2f6deb",
+    "accent.hover": "#255fd6",
+    "accent.on": "#ffffff",
+    "accent.soft": "accent 12%",
+
+    "status.success": "#1f9d62",
+    "status.warning": "#c98a1b",
+    "status.danger": "#d93a31",
+
+    "depth.shadows": true,
+    "depth.shadow": "#000000 9%",
+    "depth.highlight": "#ffffff 0%",
+
+    "radius.control": 8,
+    "radius.card": 12,
+    "size.control": 34,
+
+    "font.caption": 12,
+    "font.body": 14,
+    "font.title": 18,
+    "font.heading": 24,
+
+    "motion.fast": "120ms",
+    "motion.base": "200ms",
+
+    "text.blend": "adaptive",
+    "text.contrast": 0.1,
+    "text.snap": true,
+
+    "dark": false,
+  },
+}

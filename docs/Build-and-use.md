@@ -9,7 +9,7 @@ Requirements, presets, the examples, and the ways to put smalti into a project.
 - Windows 10 or 11, with the Windows SDK that comes with Visual Studio or its Build Tools.
 - Linux with an X server (Wayland desktops run smalti through XWayland) and the X11 headers: `sudo apt install libx11-dev` on Debian and Ubuntu.
 
-Nothing is downloaded at build time. The default font is compiled into the library from `fonts/`.
+Nothing is downloaded at build time. The default font and the built-in themes are compiled into the library from `fonts/` and `themes/`.
 
 ## Presets
 
@@ -34,7 +34,8 @@ On Linux, the same with `linux`, then `build/linux/gallery`.
 ## Examples
 
 - `hello`: a heading, a label and a button that counts.
-- `gallery`: every v0.1 control, the three themes (switch with the radio buttons at the bottom of the sidebar), a second window, and a custom widget (the sidebar).
+- `gallery`: every v0.1 control, the three themes (switch with the radio buttons at the bottom of the sidebar), a second window, and a custom widget (the sidebar). `gallery night.jsonc` opens it in the theme that file describes, listed after the built-in ones ([Themes](Themes.md)).
+- `smalti-theme check <file.jsonc>`: reports every error in a theme file, with its line and column.
 
 ## Using smalti in a project
 
@@ -51,4 +52,4 @@ Or `add_subdirectory` on a copy of the repository, or `cmake --install` and then
 
 **Windows programs** can start at `main()`: build them with `add_executable(app WIN32 ...)` and the linker option `/ENTRY:mainCRTStartup`, as the examples do, so no console window opens.
 
-**Options:** `SMALTI_BUILD_EXAMPLES`, `SMALTI_BUILD_TESTS` and `SMALTI_INSTALL` default to on only when smalti is the top-level project. `SMALTI_HEADLESS_ONLY` builds without any window system. `SMALTI_SANITIZE` applies the sanitizers to smalti's own targets, never to yours.
+**Options:** `SMALTI_BUILD_EXAMPLES`, `SMALTI_BUILD_TESTS`, `SMALTI_BUILD_TOOLS` (`smalti-theme`) and `SMALTI_INSTALL` default to on only when smalti is the top-level project. `SMALTI_HEADLESS_ONLY` builds without any window system. `SMALTI_SANITIZE` applies the sanitizers to smalti's own targets, never to yours.

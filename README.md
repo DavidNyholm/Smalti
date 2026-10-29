@@ -51,7 +51,7 @@ Every widget is reached through a `Ref<T>`: a checked handle you can copy into a
 
 ## What it does
 
-- **A modern look by default:** layered surfaces, hairline borders, soft shadows computed in closed form, and Inter embedded as the default font. Three built-in themes: Dark, Light, and Black for OLED screens (true black, with depth from borders because shadows cannot be seen on black).
+- **A modern look by default:** layered surfaces, hairline borders, soft shadows computed in closed form, and Inter embedded as the default font. Three built-in themes: Dark, Light, and Black for OLED screens (true black, with depth from borders because shadows cannot be seen on black). In `beta`, a theme is also a file you can write and check yourself: [Themes](docs/Themes.md).
 - **Motion everywhere:** hover, press, focus and value changes animate. Each animation is a function of the frame clock, so it costs nothing between animations and is exactly where it should be at any frame rate.
 - **Smooth and light:** widgets are drawn on the CPU and composited on the GPU (Direct3D 11 on Windows), presented in step with the display. Only what changed is redrawn, and an idle window uses no CPU. The first frame never waits for the GPU driver.
 - **Safe to hold:** `Ref<T>` handles, deferred removal (a callback may remove its own widget or close its own window), one UI thread enforced on every call (except `App::post`, the one call made for other threads), exceptions from callbacks rethrown from `run()` rather than through the OS.
