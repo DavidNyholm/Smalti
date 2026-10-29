@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(smalti
-  VERSION 0.1.0
+  VERSION 0.1.2
   DESCRIPTION "A C++20 GUI library for desktop applications"
   LANGUAGES CXX)
 
@@ -111,6 +111,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review3.cpp
     tests/test_review4.cpp
     tests/test_review5.cpp
+    tests/test_review6.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_widgets.cpp)

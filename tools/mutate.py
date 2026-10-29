@@ -534,6 +534,31 @@ MUTATIONS = [
             )
         ],
     ),
+    (
+        "platform/backend.cpp",
+        "round 6: any positive dpi is trusted",
+        [("!std::isfinite(dpi) || dpi < kMinDpi || dpi > kMaxDpi", "dpi <= 0")],
+    ),
+    (
+        "platform/backend.cpp",
+        "round 6: a NaN window size reaches lround",
+        [("  if (!(v >= 1)) return 1;  // also NaN", "  if (v < 1) return 1;")],
+    ),
+    (
+        "render/canvas.cpp",
+        "round 6: fill_rect takes colours out of range",
+        [
+            (
+                "void Canvas::fill_rect(RectF r, Color c) {\n  c = unit(c);\n",
+                "void Canvas::fill_rect(RectF r, Color c) {\n",
+            )
+        ],
+    ),
+    (
+        "render/canvas.cpp",
+        "round 6: shapes take colours out of range",
+        [("  if (m.empty()) return;\n  c = unit(c);\n", "  if (m.empty()) return;\n")],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

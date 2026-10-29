@@ -4,14 +4,14 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 103 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 106 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
 - **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
 - **Lifetimes:** dead `Ref`s are reported and never dereferenced, slot reuse does not revive old `Ref`s, widgets remove themselves from their own callbacks, calls from another thread are refused, 2,000 rounds of building and removing controls and 300 windows opened and closed return to the starting widget count.
 - **Layout, widgets and motion:** stacks, grids, every control by mouse and keyboard, focus order, animations that settle and then request no more frames.
 - **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much.
-- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) `tests/test_review4.cpp` (round 4: 12 tests) and `tests/test_review5.cpp` (round 5: 5 tests). See below.
+- **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) `tests/test_review4.cpp` (round 4: 12 tests) `tests/test_review5.cpp` (round 5: 5 tests) and `tests/test_review6.cpp` (round 6, the findings that apply to 0.1: 3 tests). See below.
 
 ```bash
 cmake --preset windows
@@ -37,9 +37,9 @@ cmake --build --preset linux-asan
 
 ## Injected bugs
 
-A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-four that each undo one of the review fixes below.
+A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-eight that each undo one of the review fixes below.
 
-Result on the current sources, MSVC Debug: **66 of 66 caught**, by a failing test or a crashing test binary, none by a time-out.
+Result on the current sources, MSVC Debug: **70 of 70 caught**, by a failing test or a crashing test binary, none by a time-out.
 
 Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
@@ -64,7 +64,7 @@ The second form runs only the bugs whose description contains the given text. A 
 
 ## Review
 
-Before its release, v0.1 had three rounds of code review, and the released 0.1.0 a fourth and a fifth before 0.1.1, by a second model, **GPT-6-Astra** (model id `gpt-6-astra`, at its highest reasoning effort) through the Codex CLI: read-only passes over the whole source, asked to act as a hostile senior engineer and to state each finding as a concrete failure scenario. Claude checked every finding against the code before fixing it; all of them turned out to be real. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
+Before its release, v0.1 had three rounds of code review, the released 0.1.0 a fourth and a fifth before 0.1.1, and the work for 0.2 a sixth, three of whose findings 0.1.2 fixes, by a second model, **GPT-6-Astra** (model id `gpt-6-astra`, at its highest reasoning effort) through the Codex CLI: read-only passes over the whole source, asked to act as a hostile senior engineer and to state each finding as a concrete failure scenario. Claude checked every finding against the code before fixing it; all of them turned out to be real. Where a defect could be reproduced without a screen, a regression test was written first and seen to fail before the fix.
 
 ### Round 1
 
@@ -193,4 +193,16 @@ The fifth round concentrated on the round-4 changes. It judged 10 of those 17 fi
 | 11 | A widget's own hover hook that hid it could leave its cursor showing. | The cursor is set only for a widget that still has the hover. | Test |
 
 After round 5, `hello` on the GPU path still shows "Clicked 3 times." and idles at 0.0% CPU, the gallery measured a median of 5.7% of one core, and the X11 checks on Xvfb and WSLg pass as before.
+
+### Round 6, for 0.1.2
+
+The sixth round reviewed the theme work for 0.2 in the `beta` branch, and reported 11 defects; they are fixed there, and the [page in `beta`](https://github.com/DavidNyholm/Smalti/blob/beta/docs/How-it-is-checked.md) lists all of them. Three were older than that work and are in 0.1 too; 0.1.2 fixes those three. Their tests were written with the fixes, so instead of each being seen to fail first, an injected bug that undoes each fix is caught by its test.
+
+| # | Defect | Fix | Checked by |
+|---|---|---|---|
+| 4 | X11 trusted an `Xft.dpi` of `inf` (or any huge number), and an infinite scale reached `lround` and the conversion of window sizes to integers. | The setting counts only as a finite number from 24 to 960. | Test; and by hand on Xvfb with `Xft.dpi: inf` set: 0.1.1 opened a window of 0 by 0 logical pixels, 0.1.2 opens it at the size asked for |
+| 4 | Window sizes from `WindowOptions` were converted to integers unchecked on every backend: NaN, infinite or enormous sizes reached undefined conversions. | Every backend converts them through one checked function. | Test |
+| 5 | A colour outside 0 to 1 (from a custom widget, or a button's hover tint over an opaque hover colour, which is half again as strong) was packed into a wrong colour. | The canvas clamps every colour it draws (NaN to 0). | Test |
+
+After these fixes, a window opened on Win32, WSLg and Xvfb at the size asked for and idled at about a millisecond of CPU over two seconds, and the gallery screenshots are byte-identical to those of 0.1.1.
 

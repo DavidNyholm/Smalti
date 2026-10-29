@@ -18,8 +18,8 @@ void HeadlessWindow::present(std::span<const RectI>) { ++presents_; }
 
 void HeadlessWindow::resize(Size logical, float scale) {
   scale_ = scale;
-  const int w = std::max(1, static_cast<int>(std::lround(logical.width * scale)));
-  const int h = std::max(1, static_cast<int>(std::lround(logical.height * scale)));
+  const int w = window_pixels(logical.width, scale);
+  const int h = window_pixels(logical.height, scale);
   bitmap_ = detail::Bitmap(w, h);
   events_.on_resize(w, h, scale);
 }

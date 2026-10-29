@@ -2,6 +2,16 @@
 
 Semantic versioning; during 0.x, any version may change the API, and every change that does is listed here.
 
+## 0.1.2 (2026-10-30)
+
+Three fixes from review round 6. That round reviewed the theme work for 0.2, and these defects in it were older than that work, so 0.1 has them too; [How it is checked](docs/How-it-is-checked.md) lists them. No API changes.
+
+- X11 ignores an `Xft.dpi` setting that is not a finite number from 24 to 960. A setting of `inf` was taken as an infinite scale, which reached integer conversions that are undefined for it: windows opened at 0 by 0 logical pixels.
+- Window sizes from `WindowOptions` (and their minimum sizes) are converted to device pixels safely on every backend, whatever their value: NaN or an infinite or enormous size opens a window between 1 and 32768 pixels instead of reaching an undefined conversion.
+- The canvas clamps every colour it draws to the range 0 to 1 (NaN to 0). A colour outside it, from a custom widget or from a theme whose hover colour is opaque (a button's hover tint is half again as strong), was packed into a wrong colour.
+- The CMake package reports this version; 0.1.1's still said 0.1.0, so `find_package(smalti 0.1.1)` refused it.
+- Tests: the Release build of the tests compiles without a warning again, and the test runner's allocation counter replaces the nothrow `operator new` too, which AddressSanitizer otherwise reports as a mismatch once a test path uses it.
+
 ## 0.1.1 (2026-10-29)
 
 Fixes from review rounds 4 and 5, on the released 0.1.0, among them a memory-safety defect (drawing far outside the window could write outside the frame buffer); [How it is checked](docs/How-it-is-checked.md) lists them all. Two findings about grid spans that overlap across fit columns are left for 0.2. The changes that show in the API or on screen:
