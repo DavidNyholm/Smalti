@@ -98,6 +98,10 @@ inline std::optional<size_t> find_name(const std::array<std::string_view, N>& na
 
 std::optional<size_t> find_token(std::string_view name);
 std::vector<std::string_view> token_names(std::optional<TokenKind> only = std::nullopt);
+// "18%" gives 0.18; anything but a percentage from 0% to 100% gives nothing.
+std::optional<float> parse_percent(std::string_view s);
+// The message for a key that an object sets twice.
+std::string set_twice(std::string_view key, TextPos first);
 // Text from the file, quoted for a message: cut short, and without control characters.
 std::string quote_text(std::string_view s);
 // "; did you mean "accent"?" when one candidate is close to what was typed, else nothing.

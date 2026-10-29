@@ -9,6 +9,8 @@
 
 #include "check.hpp"
 #include "smalti/theme.hpp"
+#include "support.hpp"
+#include "theme/widget_styles.hpp"
 
 namespace smalti::detail {
 extern const unsigned char kThemeDark[];
@@ -236,7 +238,7 @@ TEST(theme_file_reports_each_error_where_it_is) {
       {R"({"base": "drak"})", 1, 10, "did you mean \"dark\"?"},
       {R"({"base": 1})", 1, 10, "\"base\" is \"dark\", \"black\", \"light\" or \"none\""},
       {R"({"tokens": []})", 1, 12, "\"tokens\" is an object"},
-      {R"({"widgets": {"Button": {}}})", 1, 2, "does not read widget styles yet"},
+      {R"({"widgets": {"Buton": {}}})", 1, 14, "did you mean \"Button\"?"},
       {R"({"tokens": {"accnet": "#ffffff"}})", 1, 13,
        "unknown token \"accnet\"; did you mean \"accent\"?"},
       {R"({"tokens": {"Accent": "#ffffff"}})", 1, 13, "did you mean \"accent\"?"},
@@ -343,17 +345,34 @@ TEST(theme_load_reads_files_and_reports_ones_it_cannot) {
   fs::remove_all(dir);
 }
 
-// Random damage to the built-in files, as the font reader gets: whatever comes back must be
-// either a theme inside the documented ranges or errors that point inside the text, with an
-// untouched built-in theme. Run under the sanitizers for memory errors.
+// A theme with a little of everything, so damage reaches the widgets section too.
+constexpr std::string_view kStyledSample = R"({
+  "name": "Sample",
+  "base": "light",
+  "tokens": {"accent": "#2bb5a6", "accent.soft": "accent 20%", "radius.card": "radius.control"},
+  "widgets": {
+    "Button": {"radius": 6, "focus": "accent"},
+    "Button.primary": {"hover": {"fill": "#3cc4b5"}, "pressed": {"fill": "accent 80%"}},
+    "CheckBox": {"checked": {"fill": "status.success"}, "disabled": {"opacity": "30%"}},
+    "Label.caption": {"text": "text.secondary"},
+    "Card": {"radius": 20, "border": "#00000000"},
+  },
+})";
+
+// Random damage to the built-in files and a styled sample, as the font reader gets: whatever
+// comes back must be either a theme inside the documented ranges, whose widget rules all name
+// real properties, or errors that point inside the text, with an untouched built-in theme. Run
+// under the sanitizers for memory errors.
 TEST(theme_file_survives_damage) {
   constexpr int kRounds = 3000;
   constexpr int kMaxEdits = 4;
   const std::string_view structure = "{}[],:\"/*\\ #%.-0123456789eatrufnl";
+  CHECK(parse_theme(kStyledSample).ok());  // undamaged, the sample is a valid theme
   std::mt19937 rng(20261029);
   int parsed = 0;
   for (int round = 0; round < kRounds; ++round) {
-    std::string text(builtin_text(round % 3));
+    constexpr int kSources = 4;
+    std::string text(round % kSources == 3 ? kStyledSample : builtin_text(round % kSources));
     const int edits = 1 + static_cast<int>(rng() % kMaxEdits);
     for (int k = 0; k < edits && !text.empty(); ++k) {
       const size_t at = rng() % text.size();
@@ -394,6 +413,13 @@ TEST(theme_file_survives_damage) {
       CHECK(t.text_body >= 6 && t.text_body <= 96);
       CHECK(t.motion_base >= 0ms && t.motion_base <= 5000ms);
       CHECK(t.border.a >= 0 && t.border.a <= 1);
+      ExpectContracts expect;  // a rule the styles refuse would throw here
+      try {
+        (void)detail::compute_widget_styles(t);
+      } catch (const ContractError& e) {
+        check::fail(std::string("a loaded theme with a rule the styles refuse: ") + e.what(),
+                    __FILE__, __LINE__);
+      }
     } else {
       CHECK(is_builtin(r.theme));
     }

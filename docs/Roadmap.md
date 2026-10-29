@@ -5,7 +5,7 @@ What comes after v0.1, in order. Each version is tagged on `main` only after the
 **v0.2 "Words": text input and themes as files.**
 - `TextBox`: caret, selection, word jumps, clipboard, undo, password mode, input-method placement.
 - Clipboard on both platforms.
-- Themes as data files (JSON with comments) with live reload: edit a theme and the running app restyles itself. Precise errors that never half-apply a theme, and a page describing the format for people and for agents. **In `beta`:** the format, the loader, `smalti-theme check` and the [Themes](Themes.md) page; still to come are widget styles and live reload.
+- Themes as data files (JSON with comments) with live reload: edit a theme and the running app restyles itself. Precise errors that never half-apply a theme, and a page describing the format for people and for agents. **In `beta`:** the format, the loader, widget styles, `smalti-theme check` and the [Themes](Themes.md) page; still to come is live reload.
 - Grid spans solved together, so spans that overlap across fit columns always get a split that fits when one exists.
 
 **v0.3 "Content": scrolling, lists, images.**

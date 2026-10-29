@@ -128,19 +128,6 @@ std::optional<Color> parse_hex(std::string_view s) {
   return Color::hex(v >> 8, static_cast<float>(v & 0xFF) / 255.0f);
 }
 
-// "18%": the opacity as 0..1. Divided in float so that a whole percentage gives exactly the
-// float a C++ literal would (18% is 0.18f).
-std::optional<float> parse_percent(std::string_view s) {
-  if (s.size() < 2 || s.back() != '%') return std::nullopt;
-  s.remove_suffix(1);
-  double p = 0;
-  const auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), p);
-  if (ec != std::errc{} || end != s.data() + s.size() || !(p >= 0 && p <= 100)) {
-    return std::nullopt;
-  }
-  return static_cast<float>(p) / 100.0f;
-}
-
 std::optional<TokenExpr> read_reference(const TokenSpec& spec, std::string_view name, TextPos pos,
                                         ThemeErrors& errors) {
   const std::optional<size_t> i = find_token(name);
@@ -216,6 +203,19 @@ std::optional<TokenExpr> read_duration(const TokenSpec& spec, std::string_view s
 }
 
 }  // namespace
+
+// Divided in float so that a whole percentage gives exactly the float a C++ literal would (18%
+// is 0.18f).
+std::optional<float> parse_percent(std::string_view s) {
+  if (s.size() < 2 || s.back() != '%') return std::nullopt;
+  s.remove_suffix(1);
+  double p = 0;
+  const auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), p);
+  if (ec != std::errc{} || end != s.data() + s.size() || !(p >= 0 && p <= 100)) {
+    return std::nullopt;
+  }
+  return static_cast<float>(p) / 100.0f;
+}
 
 std::optional<TokenExpr> read_token_value(const TokenSpec& spec, const JsonValue& v,
                                           ThemeErrors& errors) {
@@ -328,6 +328,10 @@ std::string quote_text(std::string_view s) {
   for (const char c : s.substr(0, n)) out += static_cast<uint8_t>(c) < 0x20 ? '?' : c;
   if (n < s.size()) out += "...";
   return out + "\"";
+}
+
+std::string set_twice(std::string_view key, TextPos first) {
+  return quote_text(key) + " is set twice; it was first set on line " + std::to_string(first.line);
 }
 
 std::string did_you_mean(std::string_view typed, std::span<const std::string_view> candidates) {

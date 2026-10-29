@@ -1,6 +1,6 @@
 # Widgets
 
-Every control in v0.1, what it does, and how it works from the keyboard. All of them follow the theme, animate their state changes, and draw at 40% opacity when disabled.
+Every control in v0.1, what it does, and how it works from the keyboard. All of them follow the theme, animate their state changes, and draw at 45% opacity when disabled. A theme file can restyle each of them; [Themes](Themes.md#widget-styles) lists every widget's colours and states.
 
 | Widget | Created with | Events | Keyboard |
 |---|---|---|---|

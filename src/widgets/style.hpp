@@ -6,6 +6,7 @@
 #include "core/state.hpp"
 #include "smalti/painter.hpp"
 #include "smalti/theme.hpp"
+#include "theme/widget_styles.hpp"
 
 namespace smalti::detail {
 
@@ -14,8 +15,6 @@ inline constexpr float kLabelGap = 10;
 // A focus ring sits this far outside the control.
 inline constexpr float kFocusRingGap = 3;
 inline constexpr float kFocusRingWidth = 2;
-// Disabled controls draw at this opacity.
-inline constexpr float kDisabledAlpha = 0.45f;
 
 inline float measure_text(std::string_view text, const TextStyle& style) {
   return detail::text_width(app_state().fonts.get(style.weight), style.size, text);
@@ -46,14 +45,15 @@ inline float centered_baseline(Rect r, const TextStyle& style) {
   return r.y + (r.height - (a + d)) * 0.5f + a;
 }
 
-inline Color dim_if(bool disabled, Color c) {
-  return disabled ? c.with_alpha(c.a * kDisabledAlpha) : c;
+// The style a built-in widget draws with: the theme's, computed when it was set.
+inline const WidgetStyle& widget_style(StyledWidget w, size_t variant = 0) {
+  return app_state().styles.get(w, variant);
 }
 
-inline void focus_ring(Painter& p, Rect r, float radius, const Theme& th) {
+inline void focus_ring(Painter& p, Rect r, float radius, Color color) {
   const float g = kFocusRingGap;
   p.stroke_rounded_rect({r.x - g, r.y - g, r.width + 2 * g, r.height + 2 * g}, radius + g,
-                        kFocusRingWidth, th.accent);
+                        kFocusRingWidth, color);
 }
 
 inline TextStyle body_text(const Theme& th, FontWeight weight = FontWeight::regular) {

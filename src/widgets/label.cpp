@@ -32,15 +32,8 @@ TextStyle Label::style() const {
 }
 
 Color Label::color() const {
-  const Theme& th = theme();
-  switch (options_.role) {
-    case TextRole::secondary:
-      return th.text_secondary;
-    case TextRole::caption:
-      return th.text_muted;
-    default:
-      return th.text;
-  }
+  return detail::widget_style(detail::StyledWidget::label, static_cast<size_t>(options_.role))
+      .color(detail::LabelSlot::text, detail::StyleMix{.disabled = !enabled()});
 }
 
 Size Label::measure(Size available) {
@@ -66,7 +59,7 @@ void Label::arrange(Rect bounds) {
 void Label::paint(Painter& p) {
   const TextStyle st = style();
   const Rect b = bounds();
-  const Color c = detail::dim_if(!enabled(), color());
+  const Color c = color();
   if (!options_.wrap) {
     p.text({b.x, detail::centered_baseline(b, st)}, text_, st, c);
     return;

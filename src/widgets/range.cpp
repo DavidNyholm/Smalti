@@ -74,27 +74,31 @@ void Slider::set_from_pointer(float x) {
 Size Slider::measure(Size) { return {kSliderMinWidth, kSliderHeight}; }
 
 void Slider::paint(Painter& p) {
+  using S = detail::SliderSlot;
   const Theme& th = theme();
   const Rect r = bounds();
-  const bool off = !enabled();
   const float hover = at(hover_);
+  const detail::WidgetStyle& s = detail::widget_style(detail::StyledWidget::slider);
+  const detail::StyleMix mix{.hover = hover, .focused = focus_visible(), .disabled = !enabled()};
   const float usable = std::max(0.0f, r.width - 2 * kSliderKnob);
   const float cy = r.y + r.height * 0.5f;
   const float kx = r.x + kSliderKnob + usable * fraction();
   const Rect track{r.x + kSliderKnob, cy - kTrackThickness * 0.5f, usable, kTrackThickness};
-  p.fill_rounded_rect(track, kTrackThickness * 0.5f, th.selected);
+  p.fill_rounded_rect(track, kTrackThickness * 0.5f, s.color(S::track, mix));
   p.fill_rounded_rect({track.x, track.y, kx - track.x, track.height}, kTrackThickness * 0.5f,
-                      detail::dim_if(off, th.accent));
+                      s.color(S::fill, mix));
   const float radius = kSliderKnob + kKnobHoverGrowth * hover;
   if (th.shadows) {
     const Rect knob_box{kx - radius, cy - radius, 2 * radius, 2 * radius};
     p.shadow({knob_box.x, knob_box.y + kKnobShadowOffset, knob_box.width, knob_box.height}, radius,
              kKnobShadowBlur, th.shadow, knob_box);
   }
-  p.fill_circle({kx, cy}, radius, detail::dim_if(off, Color::hex(0xFFFFFF)));
-  p.stroke_circle({kx, cy}, radius, 1, th.border);
-  if (focus_visible())
-    detail::focus_ring(p, {kx - radius, cy - radius, 2 * radius, 2 * radius}, radius, th);
+  p.fill_circle({kx, cy}, radius, s.color(S::knob, mix));
+  p.stroke_circle({kx, cy}, radius, 1, s.color(S::border, mix));
+  if (focus_visible()) {
+    detail::focus_ring(p, {kx - radius, cy - radius, 2 * radius, 2 * radius}, radius,
+                       s.color(S::focus, mix));
+  }
 }
 
 bool Slider::on_mouse(const MouseEvent& e) {
@@ -172,15 +176,17 @@ void ProgressBar::set_indeterminate(bool indeterminate) {
 Size ProgressBar::measure(Size) { return {kProgressMinWidth, kProgressThickness}; }
 
 void ProgressBar::paint(Painter& p) {
-  const Theme& th = theme();
+  using S = detail::ProgressSlot;
   const Rect r = bounds();
+  const detail::WidgetStyle& s = detail::widget_style(detail::StyledWidget::progress_bar);
+  const detail::StyleMix mix{.disabled = !enabled()};
+  const Color fill = s.color(S::fill, mix);
   const Rect track{r.x, r.y + (r.height - kProgressThickness) * 0.5f, r.width, kProgressThickness};
   const float radius = kProgressThickness * 0.5f;
-  p.fill_rounded_rect(track, radius, th.selected);
+  p.fill_rounded_rect(track, radius, s.color(S::track, mix));
   if (!indeterminate_) {
     const float t = at(fill_);
-    if (t > 0)
-      p.fill_rounded_rect({track.x, track.y, track.width * t, track.height}, radius, th.accent);
+    if (t > 0) p.fill_rounded_rect({track.x, track.y, track.width * t, track.height}, radius, fill);
     return;
   }
   // A segment that sweeps across and wraps; its position follows the frame clock directly.
@@ -192,7 +198,7 @@ void ProgressBar::paint(Painter& p) {
   const float x0 = std::max(x, track.x), x1 = std::min(x + seg, track.right());
   if (x1 > x0)
     p.fill_rounded_rect({x0, track.y, x1 - x0, track.height}, std::min(radius, (x1 - x0) * 0.5f),
-                        th.accent);
+                        fill);
   keep_animating();  // one more frame, for as long as the bar is drawn
 }
 
@@ -205,10 +211,12 @@ Size Separator::measure(Size) {
 void Separator::paint(Painter& p) {
   const Rect r = bounds();
   const float h = p.hairline();
+  const Color c = detail::widget_style(detail::StyledWidget::separator)
+                      .color(detail::SeparatorSlot::fill, detail::StyleMix{});
   if (orientation_ == Orientation::horizontal)
-    p.fill_rect({r.x, r.y + (r.height - h) * 0.5f, r.width, h}, theme().divider);
+    p.fill_rect({r.x, r.y + (r.height - h) * 0.5f, r.width, h}, c);
   else
-    p.fill_rect({r.x + (r.width - h) * 0.5f, r.y, h, r.height}, theme().divider);
+    p.fill_rect({r.x + (r.width - h) * 0.5f, r.y, h, r.height}, c);
 }
 
 }  // namespace smalti

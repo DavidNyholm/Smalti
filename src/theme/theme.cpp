@@ -15,6 +15,7 @@
 #include "smalti/ref.hpp"
 #include "theme/jsonc.hpp"
 #include "theme/tokens.hpp"
+#include "theme/widgets_section.hpp"
 
 namespace smalti {
 
@@ -39,8 +40,10 @@ using detail::JsonMember;
 using detail::JsonValue;
 using detail::kTokenCount;
 using detail::kTokens;
+using detail::PendingStyleRule;
 using detail::quote_text;
 using detail::read_token_value;
+using detail::set_twice;
 using detail::TextPos;
 using detail::ThemeErrors;
 using detail::ThemeField;
@@ -60,11 +63,8 @@ struct Document {
   TextPos tokens_pos;
   std::array<std::optional<TokenExpr>, kTokenCount> tokens;
   std::array<bool, kTokenCount> listed{};  // the file has the key, valid or not
+  std::vector<PendingStyleRule> rules;     // the "widgets" section
 };
-
-std::string set_twice(std::string_view key, TextPos first) {
-  return quote_text(key) + " is set twice; it was first set on line " + std::to_string(first.line);
-}
 
 void read_tokens(const JsonValue& tokens, Document& doc, ThemeErrors& errors) {
   if (tokens.kind != JsonKind::object) {
@@ -120,11 +120,7 @@ void read_member(TopKey key, const JsonMember& m, Document& doc, ThemeErrors& er
       read_tokens(v, doc, errors);
       return;
     case TopKey::widgets:
-      if (v.kind != JsonKind::object || !v.members.empty()) {
-        errors.add(m.pos,
-                   "this version of smalti does not read widget styles yet; remove \"widgets\" "
-                   "or leave it empty");
-      }
+      detail::read_widgets_section(v, doc.rules, errors);
       return;
   }
 }
@@ -243,6 +239,28 @@ void set_field(Theme& theme, const ThemeField& field, const TokenValue& v) {
       field);
 }
 
+// A widget style rule's value, now that the tokens it may name are known.
+StyleRule resolve_rule(const PendingStyleRule& p, const Resolver& tokens) {
+  StyleRule r = p.rule;
+  TokenValue v = p.expr.literal;
+  if (p.expr.ref >= 0) {
+    v = tokens.value(static_cast<size_t>(p.expr.ref));
+    v.color.a *= p.expr.opacity;
+  }
+  switch (p.kind) {
+    case detail::StyleProperty::Kind::color:
+      r.color = v.color;
+      break;
+    case detail::StyleProperty::Kind::radius:
+      r.number = static_cast<float>(v.number);
+      break;
+    case detail::StyleProperty::Kind::opacity:
+      r.number = p.opacity;
+      break;
+  }
+  return r;
+}
+
 // "night.jsonc" or "themes/night.jsonc" gives "night".
 std::string stem(std::string_view source) {
   const size_t slash = source.find_last_of("/\\");
@@ -276,6 +294,8 @@ std::optional<Theme> build(const Document& doc, std::string_view source, ThemeEr
   Theme theme;
   for (size_t i = 0; i < kTokenCount; ++i) set_field(theme, kTokens[i].field, resolver.value(i));
   theme.name = doc.name ? *doc.name : stem(source);
+  for (const PendingStyleRule& p : doc.rules)
+    theme.widget_styles.push_back(resolve_rule(p, resolver));
   return theme;
 }
 

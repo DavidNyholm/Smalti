@@ -44,6 +44,8 @@ add_library(smalti STATIC
   src/theme/jsonc.cpp
   src/theme/theme.cpp
   src/theme/tokens.cpp
+  src/theme/widget_styles.cpp
+  src/theme/widgets_section.cpp
   src/widgets/controls.cpp
   src/widgets/label.cpp
   src/widgets/range.cpp
@@ -137,6 +139,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_review3.cpp
     tests/test_review4.cpp
     tests/test_review5.cpp
+    tests/test_styles.cpp
     tests/test_ref.cpp
     tests/test_text.cpp
     tests/test_theme.cpp

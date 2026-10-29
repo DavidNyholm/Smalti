@@ -630,6 +630,56 @@ MUTATIONS = [
             )
         ],
     ),
+    (
+        "theme/widget_styles.cpp",
+        "a widget style rule for every variant beats one for a single variant",
+        [
+            (
+                "    for (const bool one_variant : {false, true}) {",
+                "    for (const bool one_variant : {true, false}) {",
+            )
+        ],
+    ),
+    (
+        "theme/widget_styles.cpp",
+        "a disabled widget style does not dim",
+        [("    c = d ? *d : c.with_alpha(c.a * disabled_opacity);", "    c = d ? *d : c;")],
+    ),
+    (
+        "theme/widget_styles.cpp",
+        "the widget style press shade ignores the hover fill",
+        [("over(hovered ? *hovered : rest(s, S::fill), kPressShade)", "over(rest(s, S::fill), kPressShade)")],
+    ),
+    (
+        "theme/widget_styles.cpp",
+        "widget style colours of different opacity mix unpremultiplied",
+        [("  if (from.a == to.a) return Color::mix(from, to, t);", "  return Color::mix(from, to, t);")],
+    ),
+    (
+        "theme/widget_styles.cpp",
+        "a widget style's focused colour never shows",
+        [("f && mix.focused)", "f && false)")],
+    ),
+    (
+        "theme/widgets_section.cpp",
+        "a widget style may set a state the widget does not have",
+        [("    if (!(schema_->states & state_bit(state))) {", "    if (false) {")],
+    ),
+    (
+        "theme/theme.cpp",
+        "a widget style rule naming a token drops its opacity",
+        [("    v.color.a *= p.expr.opacity;\n", "")],
+    ),
+    (
+        "widgets/label.cpp",
+        "every label draws with the body text's widget style",
+        [
+            (
+                "detail::StyledWidget::label, static_cast<size_t>(options_.role))",
+                "detail::StyledWidget::label, 0)",
+            )
+        ],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

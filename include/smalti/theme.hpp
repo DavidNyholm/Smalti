@@ -27,6 +27,20 @@ struct TextTuning {
   friend bool operator==(const TextTuning&, const TextTuning&) = default;
 };
 
+// One property of one widget's style, as a theme file's "widgets" section sets it: Button,
+// variant primary, state hover, property fill. Widgets draw their built-in look, computed from
+// the theme's colours and sizes, wherever no rule applies. docs/Themes.md lists every widget,
+// variant, state and property; a rule that names none of them is a contract violation.
+struct StyleRule {
+  std::string widget;    // "Button"
+  std::string variant;   // "primary"; empty for every variant
+  std::string state;     // "hover", "pressed", "checked", "focused", "disabled"; empty at rest
+  std::string property;  // "fill"
+  Color color;           // a colour property's value
+  float number = 0;      // the value of "radius" (pixels) or "opacity" (0 to 1)
+  friend bool operator==(const StyleRule&, const StyleRule&) = default;
+};
+
 struct Theme {
   std::string name;
 
@@ -57,6 +71,10 @@ struct Theme {
 
   TextTuning text_tuning;
   bool dark = true;  // asks the platform for a dark window frame
+
+  // Rules over the widgets' built-in look. A rule for one variant wins over a rule for every
+  // variant; otherwise the later rule wins.
+  std::vector<StyleRule> widget_styles;
   friend bool operator==(const Theme&, const Theme&) = default;
 };
 

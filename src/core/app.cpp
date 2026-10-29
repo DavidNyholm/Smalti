@@ -24,6 +24,7 @@ AppState::AppState(App& app_ref, const AppOptions& options)
       theme(options.theme      ? *options.theme
             : system.dark_mode ? theme_dark()
                                : theme_light()),
+      styles(compute_widget_styles(theme)),
       fonts(load_embedded_fonts()) {}
 
 AppState::~AppState() = default;
@@ -190,7 +191,9 @@ void App::post(Callback<void()> fn) {
 
 void App::set_theme(const Theme& theme) {
   detail::Registry::instance().check_thread();
+  detail::WidgetStyles styles = detail::compute_widget_styles(theme);  // checks its rules first
   state_->theme = theme;
+  state_->styles = std::move(styles);
   for (auto& w : state_->windows) {
     w->state().native->set_dark_frame(theme.dark);
     w->state().invalidate_layout();

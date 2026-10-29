@@ -2,7 +2,7 @@
 
 A theme is a text file in JSON with comments. It sets the colours, sizes, fonts and motion that every built-in widget draws with. The three built-in themes are such files ([`themes/dark.jsonc`](../themes/dark.jsonc), `black.jsonc` and `light.jsonc`), compiled into the library. This page describes the whole format, so a person or a language model can write a valid theme from it alone.
 
-> **In `beta`, for 0.2.** Theme files can be read, checked and applied. Still to come in 0.2: widget styles (the `widgets` section) and live reload, which restyles a running app when the file is saved.
+> **In `beta`, for 0.2.** Theme files, widget styles included, can be read, checked and applied. Still to come in 0.2: live reload, which restyles a running app when the file is saved.
 
 ## A theme in a minute
 
@@ -54,7 +54,7 @@ if (r.ok()) {
 | `name` | The theme's name, a string. Without it, the file's name: `night.jsonc` is called "night". |
 | `base` | The built-in theme the file starts from: `"dark"` (the default), `"black"` or `"light"`. The file then lists only what it changes. `"none"` starts from nothing, so the file must set every token, as the built-in files do. |
 | `tokens` | An object of token names and values; the tokens are listed below. |
-| `widgets` | Styles for single widgets. Not read yet: an empty object is accepted, and anything in it is an error. |
+| `widgets` | Changes to single widgets, over the look the tokens give them: [Widget styles](#widget-styles) below. |
 
 - Any other key is an error, and so is a key set twice.
 
@@ -113,6 +113,57 @@ The last column is Dark's value; [`themes/black.jsonc`](../themes/black.jsonc) a
 | `text.snap` | switch | | stretches text slightly so the x-height lands on a whole pixel | `true` |
 | `dark` | switch | | asks the platform for a dark window frame | `true` |
 
+## Widget styles
+
+Every built-in widget draws a look made from the tokens. The `widgets` section changes single widgets on top of that, so it lists only what differs:
+
+```jsonc
+"widgets": {
+  "Button": { "radius": 6 },
+  "Button.primary": {
+    "fill": "#2bb5a6",
+    "hover": { "fill": "#3cc4b5" },
+    "pressed": { "fill": "#239a8d" },
+  },
+  "CheckBox": { "checked": { "fill": "status.success" } },
+  "Label.caption": { "text": "text.secondary" },
+  "Switch": { "disabled": { "opacity": "30%" } },
+}
+```
+
+- **Keys** name a widget, or a widget and one of its variants: `"Button"` styles every button, `"Button.primary"` primary buttons only. A variant's setting wins over the widget's, in whichever order they are written.
+- **Properties** at the top of a widget's style are its colours at rest, and `radius` for the widgets that have one. Their values are written as token values are: a colour as `#rrggbb`, `#rrggbbaa`, a colour token, or either with an opacity; `radius` as a number or a radius token.
+- **States** are blocks beside the properties: `hover`, `pressed`, `checked`, `focused` and `disabled`, each setting colours for that state. A state's colour fades in with the widget's own motion (under the pointer, over `motion.fast`). They apply in that order, so where `hover` and `checked` both set a colour, a checked box under the pointer shows the checked one. `focused` means keyboard focus, while the focus ring shows, and applies at once.
+- **Disabled** can set colours, which are then drawn as they are, and `opacity`, a percentage that a disabled control's colours are multiplied by: `"45%"` unless set.
+- **A state you do not set keeps its built-in look.** Most built-in states are tokens (a primary button's hover is `accent.hover`, so a file that changes its fill should set its hover fill too). Two are relative: under the pointer, secondary and ghost buttons lay `state.hover` (half again as strong) over their fill, whatever the fill is; and a pressed button of any variant darkens its hover fill with 12% black.
+
+| Widget | Variants | Colours | Radius | States |
+|---|---|---|---|---|
+| `Button` | `primary`, `secondary`, `ghost`, `danger` | `fill`, `border`, `text`, `focus` | yes | hover, pressed, focused, disabled |
+| `CheckBox` | | `fill` (the box), `border`, `mark` (the tick), `text`, `focus` | yes | hover, checked, focused, disabled |
+| `Switch` | | `track`, `border`, `knob`, `text`, `focus` | | hover, checked (on), focused, disabled |
+| `RadioButton` | | `fill`, `border` (the ring), `mark` (the dot), `text`, `focus` | | hover, checked (selected), focused, disabled |
+| `Slider` | | `track`, `fill` (the track up to the knob), `knob`, `border` (the knob's), `focus` | | hover, focused, disabled |
+| `ProgressBar` | | `track`, `fill` | | disabled |
+| `Separator` | | `fill` | | |
+| `Label` | `body`, `secondary`, `caption`, `title`, `heading` | `text` | | disabled |
+| `Card` | | `fill`, `border` | yes | |
+
+`focus` is the colour of the focus ring. The built-in look, which a style changes:
+
+- **Button:** radius `radius.control`. Primary: fill `accent`, under the pointer `accent.hover`; text `accent.on`. Secondary: fill `surface.raised`, border `line.border`, text `text.primary`. Ghost: no fill, text `accent`. Danger: fill `status.danger` at 14%, 20% under the pointer; text `status.danger`.
+- **CheckBox:** radius 5. Fill `surface.raised`, checked `accent`. Border `text.muted`, under the pointer `text.secondary`, gone when checked. Mark `accent.on`.
+- **Switch:** track `state.selected`, on `accent`. Border `line.border`, gone when on. Knob `text.secondary`, halfway to `text.primary` under the pointer, `accent.on` when on.
+- **RadioButton:** fill `surface.raised`. Border `text.muted`, under the pointer `text.secondary`, selected `accent`. Mark `accent`.
+- **Slider:** track `state.selected`, fill `accent`, knob `#ffffff`, border `line.border`.
+- **ProgressBar:** track `state.selected`, fill `accent`.
+- **Separator:** fill `line.divider`.
+- **Label:** `text.primary` for body, title and heading; `text.secondary` for secondary; `text.muted` for caption. The sizes are the `font` tokens.
+- **Card:** fill `surface.raised`, border `line.border`, radius `radius.card`; its shadow or top highlight follow the `depth` tokens.
+- **Every control:** text `text.primary` where not given above, focus `accent`, disabled at 45%.
+
+In code, the section's rules are `Theme::widget_styles`, a list of `StyleRule` (widget, variant, state, property, value), which a program can also build itself. A rule that names no real widget, variant, state or property is a contract violation when the theme is set.
+
 ## Errors
 
 A theme is never half-applied. `load_theme` and `parse_theme` build the whole theme (the base, then the file's changes) before anything uses it. A file with any error gives the base theme unchanged in `ThemeLoad::theme` (Dark if the file does not get as far as naming one), and `ThemeLoad::errors` lists every problem found, in file order:
@@ -124,7 +175,7 @@ night.jsonc:7:23: "radius.control" takes a radius from 0 to 100, or the name of 
 ```
 
 - Line and column are 1-based, and the column counts characters, as editors do. A file that cannot be read at all (missing, a folder, too large) is one error at line 0.
-- A syntax error stops reading at that point, so it is reported alone. Otherwise every unknown key, wrong value and loop is reported, up to 100, followed by a count of the rest.
+- A syntax error stops reading at that point, so it is reported alone. Otherwise every unknown key, wrong value and loop is reported, up to 100, followed by a count of the rest. In the `widgets` section, a name that is not a widget, variant, state or property is reported with the names that would have been valid there.
 - Limits, so any file costs little to read: 1 MB per file, objects and arrays nested at most 32 deep, 64 KB per string, 65536 values.
 - A theme is data only: it cannot run code, and reading one touches nothing but that file. That is what makes it safe to load a theme from anywhere, a user's included.
 - `smalti-theme check` prints the same errors as `file:line:column: message` and exits with 1 when any file has one, 2 when the command line is wrong.

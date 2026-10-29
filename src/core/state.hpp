@@ -15,6 +15,7 @@
 #include "render/text.hpp"
 #include "smalti/app.hpp"
 #include "smalti/window.hpp"
+#include "theme/widget_styles.hpp"
 
 namespace smalti::detail {
 
@@ -148,6 +149,7 @@ struct AppState final : platform::BackendHost {
   std::unique_ptr<platform::PlatformBackend> backend;
   platform::SystemInfo system;
   Theme theme;
+  WidgetStyles styles;  // the theme's widget styles, computed whenever the theme is set
   FontSet fonts;
   GlyphCache glyphs;
   std::vector<std::unique_ptr<Window>> windows;

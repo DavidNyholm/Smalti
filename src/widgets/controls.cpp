@@ -9,9 +9,7 @@ namespace smalti {
 namespace {
 
 constexpr float kButtonPadding = 14;
-constexpr float kPressDarken = 0.12f;  // how much a pressed button darkens
 constexpr float kBoxSize = 18;
-constexpr float kBoxRadius = 5;
 constexpr float kOutlineWidth = 1.5f;
 constexpr float kTrackWidth = 36, kTrackHeight = 20, kKnobRadius = 7;
 constexpr float kRadioRadius = 9, kRadioDot = 4.5f;
@@ -52,40 +50,24 @@ Size Button::measure(Size) {
 }
 
 void Button::paint(Painter& p) {
-  const Theme& th = theme();
+  using S = detail::ButtonSlot;
   const Rect r = bounds();
-  const float hover = at(hover_), press = at(press_);
-  const bool off = !enabled();
-  Color fill{0, 0, 0, 0}, fg = th.text;
-  switch (options_.text.empty() ? ButtonVariant::ghost : options_.variant) {
-    case ButtonVariant::primary:
-      fill = Color::mix(th.accent, th.accent_hover, hover);
-      fg = th.on_accent;
-      break;
-    case ButtonVariant::secondary:
-      fill = th.raised;
-      break;
-    case ButtonVariant::ghost:
-      fg = th.accent;
-      break;
-    case ButtonVariant::danger:
-      fill = th.danger.with_alpha(0.14f + 0.06f * hover);
-      fg = th.danger;
-      break;
-  }
-  if (fill.a > 0) p.fill_rounded_rect(r, th.radius_control, detail::dim_if(off, fill));
-  if (options_.variant == ButtonVariant::secondary)
-    p.stroke_rounded_rect(r, th.radius_control, 0, th.border);
-  if (options_.variant != ButtonVariant::primary && options_.variant != ButtonVariant::danger &&
-      hover > 0) {
-    p.fill_rounded_rect(r, th.radius_control, th.hover.with_alpha(th.hover.a * hover * 1.5f));
-  }
-  if (press > 0) p.fill_rounded_rect(r, th.radius_control, Color{0, 0, 0, kPressDarken * press});
-  const TextStyle st = detail::body_text(th, FontWeight::medium);
+  // A button without text has nothing to fill behind; it draws as a ghost.
+  const ButtonVariant variant = options_.text.empty() ? ButtonVariant::ghost : options_.variant;
+  const detail::WidgetStyle& s =
+      detail::widget_style(detail::StyledWidget::button, static_cast<size_t>(variant));
+  const detail::StyleMix mix{.hover = at(hover_),
+                             .pressed = at(press_),
+                             .focused = focus_visible(),
+                             .disabled = !enabled()};
+  const Color fill = s.color(S::fill, mix), border = s.color(S::border, mix);
+  if (fill.a > 0) p.fill_rounded_rect(r, s.radius, fill);
+  if (border.a > 0) p.stroke_rounded_rect(r, s.radius, 0, border);
+  const TextStyle st = detail::body_text(theme(), FontWeight::medium);
   const float w = p.text_width(options_.text, st);
   p.text({r.x + (r.width - w) * 0.5f, detail::centered_baseline(r, st)}, options_.text, st,
-         detail::dim_if(off, fg));
-  if (focus_visible()) detail::focus_ring(p, r, th.radius_control, th);
+         s.color(S::text, mix));
+  if (focus_visible()) detail::focus_ring(p, r, s.radius, s.color(S::focus, mix));
 }
 
 void Button::press_visual(bool down) { animate(press_, down ? 1.0f : 0.0f, theme().motion_fast); }
@@ -158,31 +140,31 @@ Size CheckBox::measure(Size) {
 }
 
 void CheckBox::paint(Painter& p) {
-  const Theme& th = theme();
+  using S = detail::CheckBoxSlot;
   const Rect r = bounds();
-  const bool off = !enabled();
-  const float t = at(check_), hover = at(hover_);
+  const float t = at(check_);
+  const detail::WidgetStyle& s = detail::widget_style(detail::StyledWidget::check_box);
+  const detail::StyleMix mix{
+      .hover = at(hover_), .checked = t, .focused = focus_visible(), .disabled = !enabled()};
   const Rect box{r.x, r.y + (r.height - kBoxSize) * 0.5f, kBoxSize, kBoxSize};
-  p.fill_rounded_rect(box, kBoxRadius, detail::dim_if(off, Color::mix(th.raised, th.accent, t)));
-  if (t < 1) {
-    const Color edge = Color::mix(th.text_muted, th.text_secondary, hover);
-    p.stroke_rounded_rect(box, kBoxRadius, kOutlineWidth,
-                          detail::dim_if(off, edge.with_alpha(edge.a * (1 - t))));
-  }
+  p.fill_rounded_rect(box, s.radius, s.color(S::fill, mix));
+  if (const Color edge = s.color(S::border, mix); edge.a > 0)
+    p.stroke_rounded_rect(box, s.radius, kOutlineWidth, edge);
   if (t > 0) {
-    // The check mark draws in as the box fills: its second stroke grows with t.
+    // The check mark draws in as the box fills: its second stroke grows with t, and it fades in.
     const Point a{box.x + 4.5f, box.y + 9.5f}, b{box.x + 7.5f, box.y + 12.5f},
         c{box.x + 13.5f, box.y + 6.0f};
     const Point tip{b.x + (c.x - b.x) * t, b.y + (c.y - b.y) * t};
     const Point mark[] = {a, b, tip};
-    p.polyline(mark, 2.0f, detail::dim_if(off, th.on_accent.with_alpha(t)));
+    const Color m = s.color(S::mark, mix);
+    p.polyline(mark, 2.0f, m.with_alpha(m.a * t));
   }
   if (!text_.empty()) {
-    const TextStyle st = detail::body_text(th);
+    const TextStyle st = detail::body_text(theme());
     p.text({box.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st,
-           detail::dim_if(off, th.text));
+           s.color(S::text, mix));
   }
-  if (focus_visible()) detail::focus_ring(p, box, kBoxRadius, th);
+  if (focus_visible()) detail::focus_ring(p, box, s.radius, s.color(S::focus, mix));
 }
 
 bool CheckBox::on_mouse(const MouseEvent& e) {
@@ -235,25 +217,26 @@ Size Switch::measure(Size) {
 }
 
 void Switch::paint(Painter& p) {
-  const Theme& th = theme();
+  using S = detail::SwitchSlot;
   const Rect r = bounds();
-  const bool off = !enabled();
-  const float t = at(knob_), hover = at(hover_);
+  const float t = at(knob_);
+  const detail::WidgetStyle& s = detail::widget_style(detail::StyledWidget::switch_toggle);
+  const detail::StyleMix mix{
+      .hover = at(hover_), .checked = t, .focused = focus_visible(), .disabled = !enabled()};
   const Rect track{r.x, r.y + (r.height - kTrackHeight) * 0.5f, kTrackWidth, kTrackHeight};
   const float radius = kTrackHeight * 0.5f;
-  p.fill_rounded_rect(track, radius, detail::dim_if(off, Color::mix(th.selected, th.accent, t)));
-  if (t < 1) p.stroke_rounded_rect(track, radius, 0, th.border.with_alpha(th.border.a * (1 - t)));
+  p.fill_rounded_rect(track, radius, s.color(S::track, mix));
+  if (const Color border = s.color(S::border, mix); border.a > 0)
+    p.stroke_rounded_rect(track, radius, 0, border);
   const float travel = kTrackWidth - 2 * radius;
   const Point knob{track.x + radius + travel * t, track.y + radius};
-  const Color knob_color =
-      Color::mix(Color::mix(th.text_secondary, th.text, hover * 0.5f), th.on_accent, t);
-  p.fill_circle(knob, kKnobRadius, detail::dim_if(off, knob_color));
+  p.fill_circle(knob, kKnobRadius, s.color(S::knob, mix));
   if (!text_.empty()) {
-    const TextStyle st = detail::body_text(th);
+    const TextStyle st = detail::body_text(theme());
     p.text({track.right() + detail::kLabelGap, detail::centered_baseline(r, st)}, text_, st,
-           detail::dim_if(off, th.text));
+           s.color(S::text, mix));
   }
-  if (focus_visible()) detail::focus_ring(p, track, radius, th);
+  if (focus_visible()) detail::focus_ring(p, track, radius, s.color(S::focus, mix));
 }
 
 bool Switch::on_mouse(const MouseEvent& e) {
@@ -349,24 +332,25 @@ Size RadioButton::measure(Size) {
 }
 
 void RadioButton::paint(Painter& p) {
-  const Theme& th = theme();
+  using S = detail::RadioSlot;
   const Rect r = bounds();
-  const bool off = !enabled();
-  const float t = at(dot_), hover = at(hover_);
+  const float t = at(dot_);
+  const detail::WidgetStyle& s = detail::widget_style(detail::StyledWidget::radio_button);
+  const detail::StyleMix mix{
+      .hover = at(hover_), .checked = t, .focused = focus_visible(), .disabled = !enabled()};
   const Point c{r.x + kRadioRadius, r.y + r.height * 0.5f};
-  p.fill_circle(c, kRadioRadius, th.raised);
-  const Color ring = Color::mix(Color::mix(th.text_muted, th.text_secondary, hover), th.accent, t);
-  p.stroke_circle(c, kRadioRadius, kOutlineWidth, detail::dim_if(off, ring));
-  if (t > 0) p.fill_circle(c, kRadioDot * t, detail::dim_if(off, th.accent));
+  p.fill_circle(c, kRadioRadius, s.color(S::fill, mix));
+  p.stroke_circle(c, kRadioRadius, kOutlineWidth, s.color(S::border, mix));
+  if (t > 0) p.fill_circle(c, kRadioDot * t, s.color(S::mark, mix));
   if (!text_.empty()) {
-    const TextStyle st = detail::body_text(th);
+    const TextStyle st = detail::body_text(theme());
     p.text({r.x + 2 * kRadioRadius + detail::kLabelGap, detail::centered_baseline(r, st)}, text_,
-           st, detail::dim_if(off, th.text));
+           st, s.color(S::text, mix));
   }
   if (focus_visible()) {
     detail::focus_ring(p,
                        {c.x - kRadioRadius, c.y - kRadioRadius, 2 * kRadioRadius, 2 * kRadioRadius},
-                       kRadioRadius, th);
+                       kRadioRadius, s.color(S::focus, mix));
   }
 }
 

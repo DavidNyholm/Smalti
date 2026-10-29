@@ -314,18 +314,20 @@ constexpr float kCardContactBlur = 1.5f;
 void Card::paint(Painter& p) {
   const Theme& th = theme();
   const Rect r = bounds();
-  const float radius = th.radius_card;
+  const detail::WidgetStyle& s = detail::app_state().styles.get(detail::StyledWidget::card);
+  const detail::StyleMix rest;
+  const float radius = s.radius;
   if (th.shadows) {
     p.shadow({r.x, r.y + kCardShadowOffset, r.width, r.height}, radius, kCardShadowBlur, th.shadow,
              r);
     p.shadow({r.x, r.y + 1, r.width, r.height}, radius, kCardContactBlur,
              th.shadow.with_alpha(th.shadow.a * 0.5f), r);
   }
-  p.fill_rounded_rect(r, radius, th.raised);
+  p.fill_rounded_rect(r, radius, s.color(detail::CardSlot::fill, rest));
   if (!th.shadows)
     p.fill_rect({r.x + radius, r.y + p.hairline(), r.width - 2 * radius, p.hairline()},
                 th.top_highlight);
-  p.stroke_rounded_rect(r, radius, 0, th.border);
+  p.stroke_rounded_rect(r, radius, 0, s.color(detail::CardSlot::border, rest));
 }
 
 }  // namespace smalti
