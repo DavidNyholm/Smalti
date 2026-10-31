@@ -8,6 +8,7 @@
 #include <type_traits>
 
 #include "core/state.hpp"
+#include "platform/text_input.hpp"
 
 namespace smalti {
 
@@ -139,7 +140,8 @@ void AppState::watch_theme(const std::filesystem::path& file) {
   theme_file = file;
   reload_theme();
   try {
-    backend->watch_file(file, [this] { theme_reload_at = backend->now_ns() + kThemeReloadDelayNs; });
+    backend->watch_file(file,
+                        [this] { theme_reload_at = backend->now_ns() + kThemeReloadDelayNs; });
   } catch (const std::runtime_error& e) {
     const ThemeError error{0, 0, e.what()};
     report_theme_errors({&error, 1});
@@ -284,6 +286,18 @@ void App::on_theme_error(Callback<void(std::span<const ThemeError>)> handler) {
 const Theme& App::theme() const {
   detail::Registry::instance().check_thread();
   return state_->theme;
+}
+
+std::optional<std::string> App::clipboard_text() {
+  detail::Registry::instance().check_thread();
+  std::optional<std::string> text = state_->backend->clipboard_text();
+  if (!text || text->size() > detail::kMaxClipboardBytes) return std::nullopt;
+  return detail::plain_text(*text);
+}
+
+bool App::set_clipboard_text(std::string_view utf8) {
+  detail::Registry::instance().check_thread();
+  return state_->backend->set_clipboard_text(detail::plain_text(utf8));
 }
 
 MemoryStats App::memory_stats() const {

@@ -91,6 +91,10 @@ void Driver::type(std::string_view utf8) {
   rethrow_failure();
 }
 
+void Driver::put_on_clipboard(std::string_view text) { backend().set_clipboard_text(text); }
+
+std::optional<std::string> Driver::clipboard_contents() const { return backend().clipboard_text(); }
+
 void Driver::resize(Size logical, float scale) {
   native(window_).resize(logical, scale);
   backend().host().after_events();

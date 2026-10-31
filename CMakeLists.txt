@@ -71,14 +71,15 @@ target_link_libraries(smalti PUBLIC Threads::Threads)
 if(SMALTI_HEADLESS_ONLY)
   target_compile_definitions(smalti PRIVATE SMALTI_HEADLESS_ONLY)
 elseif(WIN32)
-  target_sources(smalti PRIVATE src/platform/win32.cpp src/platform/win32_gpu.cpp)
+  target_sources(smalti PRIVATE src/platform/win32.cpp src/platform/win32_clipboard.cpp
+                                src/platform/win32_gpu.cpp)
   target_compile_definitions(smalti PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
   # Only system DLLs on Windows' protected KnownDLLs list are linked directly. Direct3D, DXGI
   # and DWM are loaded at run time from the system directory (see SECURITY.md).
   target_link_libraries(smalti PRIVATE user32 gdi32 advapi32 imm32)
 elseif(UNIX AND NOT APPLE)
   find_package(X11 REQUIRED)
-  target_sources(smalti PRIVATE src/platform/x11.cpp)
+  target_sources(smalti PRIVATE src/platform/x11.cpp src/platform/x11_clipboard.cpp)
   target_link_libraries(smalti PRIVATE X11::X11 ${CMAKE_DL_LIBS})
 endif()
 
@@ -161,6 +162,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_reload.cpp
     tests/test_text.cpp
     tests/test_text_input.cpp
+    tests/test_clipboard.cpp
     tests/test_theme.cpp
     tests/test_timing.cpp
     tests/test_widgets.cpp)

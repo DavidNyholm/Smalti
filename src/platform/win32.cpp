@@ -21,6 +21,7 @@
 #include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
 #include "platform/text_input.hpp"
+#include "platform/win32_clipboard.hpp"
 #include "platform/win32_gpu.hpp"
 
 namespace smalti::platform {
@@ -250,6 +251,11 @@ class Win32Backend final : public PlatformBackend {
     watched_.start(file, std::move(changed));
   }
   void stop_watching_file() override { watched_.stop(); }
+  // The wake window owns what the App copies: it lives as long as the backend.
+  std::optional<std::string> clipboard_text() override { return read_clipboard_text(wake_window_); }
+  bool set_clipboard_text(std::string_view plain) override {
+    return write_clipboard_text(wake_window_, plain);
+  }
 
   void add(Win32Window* w) { windows_.push_back(w); }
   void forget(Win32Window* w) { std::erase(windows_, w); }

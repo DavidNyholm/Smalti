@@ -27,6 +27,7 @@
 #include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
 #include "platform/text_input.hpp"
+#include "platform/x11_clipboard.hpp"
 
 namespace smalti::platform {
 
@@ -204,6 +205,8 @@ class X11Backend final : public PlatformBackend {
     watched_.start(file, std::move(changed));
   }
   void stop_watching_file() override { watched_.stop(); }
+  std::optional<std::string> clipboard_text() override { return clipboard().text(); }
+  bool set_clipboard_text(std::string_view plain) override { return clipboard().set_text(plain); }
 
   Display* display() const { return display_; }
   Atom atom(const char* name) { return XInternAtom(display_, name, False); }
@@ -218,11 +221,16 @@ class X11Backend final : public PlatformBackend {
   void pump_events();
   void open_input_method();
   static void input_method_destroyed(XIM, XPointer client, XPointer);
+  X11Clipboard& clipboard() {
+    if (!clipboard_) clipboard_ = std::make_unique<X11Clipboard>(display_);
+    return *clipboard_;
+  }
 
   Display* display_;
   BackendHost& host_;
   int wake_fd_ = -1;
-  WatchedFile watched_;  // its descriptor joins the loop's poll
+  WatchedFile watched_;                      // its descriptor joins the loop's poll
+  std::unique_ptr<X11Clipboard> clipboard_;  // made on first use
   // XIM, which every X11 input method serves (IBus and Fcitx among them); without a running
   // one, Xlib's own, which still makes dead keys and compose sequences type. Null if Xlib has
   // none for the locale: keys then type their own characters, without dead keys.
@@ -562,6 +570,7 @@ X11Backend::~X11Backend() {
   for (auto& [shape, c] : cursors_) XFreeCursor(display_, c);
   close(wake_fd_);
   if (im_) XCloseIM(im_);
+  clipboard_.reset();  // while the display is open: it may hand the text to a clipboard manager
   XCloseDisplay(display_);
 }
 
@@ -644,6 +653,7 @@ void X11Backend::pump_events() {
     // The input method sees every event first, and keeps those it uses (a dead key, a key
     // it composes with).
     if (XFilterEvent(&e, None)) continue;
+    if (clipboard_ && clipboard_->handle(e)) continue;
     for (X11Window* w : windows_) {
       if (w->id() == e.xany.window) {
         w->handle(e);

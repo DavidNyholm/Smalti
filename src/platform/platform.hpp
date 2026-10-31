@@ -6,7 +6,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include "render/canvas.hpp"
@@ -117,6 +119,13 @@ class PlatformBackend {
   // the file's folder cannot be watched.
   virtual void watch_file(const std::filesystem::path& file, Callback<void()> changed) = 0;
   virtual void stop_watching_file() = 0;
+  // The system clipboard's text in UTF-8, as the system holds it (the core makes it plain:
+  // detail::plain_text); nullopt if it holds no text, more than detail::kMaxClipboardBytes, or
+  // cannot be read in time. Synchronous: a paste needs the text now.
+  virtual std::optional<std::string> clipboard_text() = 0;
+  // Replaces what the system clipboard holds with this text. The core passes plain text ("\n"
+  // line endings); the backend writes what its system expects. False if the system refused.
+  virtual bool set_clipboard_text(std::string_view plain) = 0;
 };
 
 std::unique_ptr<PlatformBackend> create_backend(Backend kind, Presentation presentation,

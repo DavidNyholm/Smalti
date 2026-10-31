@@ -825,6 +825,51 @@ MUTATIONS = [
         "typed text: the IME stays where the caret was before a new layout",
         [("  sync_text_input();  // a new layout can move the caret without the widget saying so\n", "")],
     ),
+    (
+        "platform/text_input.cpp",
+        "clipboard text: CRLF becomes two line breaks",
+        [
+            (
+                "if (i + 1 < utf8.size() && utf8[i + 1] == '\\n') ++i;",
+                "if (i + 1 < utf8.size() && utf8[i + 1] == '\\n') {}",
+            )
+        ],
+    ),
+    (
+        "platform/text_input.cpp",
+        "clipboard text keeps NUL characters",
+        [("    } else if (cp != 0) {", "    } else {")],
+    ),
+    (
+        "platform/text_input.cpp",
+        "clipboard text: invalid bytes become '?' instead of U+FFFD",
+        [("constexpr uint32_t kReplacement = 0xFFFD;", "constexpr uint32_t kReplacement = 0x3F;")],
+    ),
+    (
+        "platform/text_input.cpp",
+        "clipboard text for Windows keeps bare LF",
+        [("if (c == '\\n') out += '\\r';", "if (c == '\\n') {}")],
+    ),
+    (
+        "platform/text_input.cpp",
+        "Latin-1 loses its last character, U+00FF",
+        [("cp <= 0xFF ? static_cast<char>(cp)", "cp < 0xFF ? static_cast<char>(cp)")],
+    ),
+    (
+        "core/app.cpp",
+        "clipboard: text of exactly the limit is refused",
+        [("text->size() > detail::kMaxClipboardBytes", "text->size() >= detail::kMaxClipboardBytes")],
+    ),
+    (
+        "core/app.cpp",
+        "clipboard: pasted text is not made plain",
+        [("  return detail::plain_text(*text);", "  return *text;")],
+    ),
+    (
+        "core/app.cpp",
+        "clipboard: copied text is not made plain",
+        [("set_clipboard_text(detail::plain_text(utf8));", "set_clipboard_text(utf8);")],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

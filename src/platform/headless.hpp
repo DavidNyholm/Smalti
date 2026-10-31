@@ -76,6 +76,12 @@ class HeadlessBackend final : public PlatformBackend {
   }
   void stop_watching_file() override { watched_.stop(); }
   void poll_file_watch() { watched_.poll(); }
+  // A clipboard of its own, in memory. Tests put text on it as another program would.
+  std::optional<std::string> clipboard_text() override { return clipboard_; }
+  bool set_clipboard_text(std::string_view plain) override {
+    clipboard_ = std::string(plain);
+    return true;
+  }
 
   // Moves the clock forward by `ns`, running every requested frame on the way.
   void advance(int64_t ns);
@@ -87,6 +93,7 @@ class HeadlessBackend final : public PlatformBackend {
   BackendHost& host_;
   std::vector<HeadlessWindow*> windows_;
   WatchedFile watched_;
+  std::optional<std::string> clipboard_;
   int64_t now_ = 0;
   bool quit_ = false;
   std::atomic<bool> woken_{false};

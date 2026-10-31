@@ -1,12 +1,29 @@
-// Typed text on its way from a backend to a widget: cleaned to what a text widget can take, and,
-// for Windows, put back together from the UTF-16 code units it arrives in.
+// Text on its way between a backend and the program. Typed text: cleaned to what a text widget
+// can take, and, for Windows, put back together from the UTF-16 code units it arrives in.
+// Clipboard text: plain UTF-8 in the program, and what each system expects outside it.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
 
 namespace smalti::detail {
+
+// Clipboard text read from other programs larger than this is not read: a paste on X11 is a
+// transfer from another program that must end, and the same limit holds on every platform.
+inline constexpr size_t kMaxClipboardBytes = size_t{16} << 20;
+
+// Clipboard text as the program sees it, both ways: valid UTF-8 (each invalid byte becomes
+// U+FFFD), "\n" line endings (from "\r\n" and a lone "\r" too), and no NUL characters.
+std::string plain_text(std::string_view utf8);
+
+// Plain text with Windows line endings, "\r\n", as the Windows clipboard holds text.
+std::string with_crlf(std::string_view plain);
+
+// X11's STRING type is Latin-1. Characters beyond U+00FF become '?' on the way out.
+std::string latin1_of(std::string_view utf8);
+std::string utf8_of_latin1(std::string_view latin1);
 
 // The typed text a widget receives: valid UTF-8 with no control characters (C0, DEL, C1).
 // Keys carry Tab, Enter, Backspace and Ctrl combinations; the text event never does.

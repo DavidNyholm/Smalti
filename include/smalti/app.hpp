@@ -4,7 +4,10 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 
 #include "smalti/callback.hpp"
 #include "smalti/ref.hpp"
@@ -72,6 +75,19 @@ class App {
   // Receives a watched theme file's errors each time it fails to load. Set it before
   // watch_theme() to see the errors of the first load too.
   void on_theme_error(Callback<void(std::span<const ThemeError>)> handler);
+
+  // The system clipboard's text, in UTF-8 with "\n" line endings (whatever the system uses);
+  // bytes that are not UTF-8 come back as U+FFFD, and NUL characters are dropped. std::nullopt
+  // when it holds no text, more than 16 MB, or cannot be read: on Windows, another program
+  // keeping it open for about 50 ms; on X11, the program that holds it not answering for
+  // 500 ms, or not finishing within 5 s. Waits for the answer, handling nothing else meanwhile.
+  std::optional<std::string> clipboard_text();
+  // Replaces the system clipboard's contents with `utf8`, cleaned as clipboard_text() would
+  // clean it; on Windows, with "\r\n" line endings. Returns false if the system refused (on
+  // Windows, another program keeping it open for about 50 ms). On X11 the App holds the text
+  // and serves it to other programs; when the App ends, a clipboard manager, where one runs
+  // (desktops run one), takes a copy, and the App's end waits up to 5 s for it.
+  bool set_clipboard_text(std::string_view utf8);
 
   MemoryStats memory_stats() const;
 

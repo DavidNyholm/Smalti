@@ -44,6 +44,15 @@ A widget that takes text says so with `accepts_text()`, and gives the position o
 - **Linux:** XIM, which every X11 input method serves (IBus and Fcitx among them, through `XMODIFIERS`). Without a running one, Xlib's own input method is used, so dead keys and compose sequences still type. Where the input method offers it, what is being composed appears at the caret (over the spot); otherwise it composes in a window of its own. Xlib reads typed text in the C library's locale, so if the program left `LC_CTYPE` as "C", smalti takes it from the environment (`LANG`), as other toolkits do; a locale the program chose is left alone.
 - Showing the text being composed inside the widget itself (inline composition) is planned after v0.5.
 
+## The clipboard
+
+`App::clipboard_text()` reads the system clipboard's text and `App::set_clipboard_text(utf8)` replaces it. Both use UTF-8 with `"\n"` line endings, whatever the system uses (Windows keeps `"\r\n"` on the clipboard). Text from other programs comes back with each invalid byte as U+FFFD and without NUL characters, and text over 16 MB is not read.
+
+Both calls finish before they return, since a paste needs the text there and then:
+
+- **Windows:** at once, unless another program has the clipboard open, as clipboard managers and remote desktop clients do for a moment after every change. smalti tries again for about 50 ms, then reports the failure: `std::nullopt`, or `false`. What the App copied stays on the clipboard after it ends.
+- **Linux:** on X11 the clipboard is a conversation between programs. The one that copied keeps the text and sends it to whoever pastes. Pasting asks that program and waits for its answer, with no other events handled meanwhile, for at most 500 ms of silence and 5 s in all; large text arrives in pieces (`INCR`). After the App copies, it answers other programs from the event loop, in UTF-8 or Latin-1, in pieces when the text is large. Since that text would be gone when the App ends, the App's end hands it to a clipboard manager if one runs, as desktops run one, waiting for it up to 5 s. The primary selection (select, then middle-click) is not supported.
+
 ## Frames and motion
 
 Widgets mark what changed (`invalidate()`); the window redraws only those rectangles at its next frame, in step with the display. Animations are values on the frame clock (`animate(motion, target, duration)`, read with `at(motion)`), so they cost nothing between animations and show the right value at any frame rate. With the system's animation setting turned off, they jump straight to the end.

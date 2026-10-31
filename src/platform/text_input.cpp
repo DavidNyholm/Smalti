@@ -1,5 +1,5 @@
 // Typed text: strict UTF-8 decoding, the characters a text event never carries, and UTF-16
-// surrogate joining.
+// surrogate joining. Clipboard text: plain UTF-8, Windows line endings, Latin-1.
 #include "platform/text_input.hpp"
 
 #include <cstdint>
@@ -81,6 +81,58 @@ std::string typed_text(std::string_view utf8) {
     if (!is_control(cp)) out.append(utf8.substr(i, n));
     i += n;
   }
+  return out;
+}
+
+std::string plain_text(std::string_view utf8) {
+  constexpr uint32_t kReplacement = 0xFFFD;
+  std::string out;
+  out.reserve(utf8.size());
+  for (size_t i = 0; i < utf8.size();) {
+    uint32_t cp = 0;
+    const size_t n = decode(utf8, i, cp);
+    if (n == 0) {
+      append_utf8(out, kReplacement);  // a character was lost here: show it, unlike typed text
+      ++i;
+      continue;
+    }
+    if (cp == '\r') {
+      out += '\n';
+      if (i + 1 < utf8.size() && utf8[i + 1] == '\n') ++i;  // "\r\n" is one line break
+    } else if (cp != 0) {
+      out.append(utf8.substr(i, n));
+    }
+    i += n;
+  }
+  return out;
+}
+
+std::string with_crlf(std::string_view plain) {
+  std::string out;
+  out.reserve(plain.size() + plain.size() / 16);
+  for (const char c : plain) {
+    if (c == '\n') out += '\r';
+    out += c;
+  }
+  return out;
+}
+
+std::string latin1_of(std::string_view utf8) {
+  std::string out;
+  out.reserve(utf8.size());
+  for (size_t i = 0; i < utf8.size();) {
+    uint32_t cp = 0;
+    const size_t n = decode(utf8, i, cp);
+    out += n != 0 && cp <= 0xFF ? static_cast<char>(cp) : '?';
+    i += n != 0 ? n : 1;
+  }
+  return out;
+}
+
+std::string utf8_of_latin1(std::string_view latin1) {
+  std::string out;
+  out.reserve(latin1.size());
+  for (const char c : latin1) append_utf8(out, static_cast<uint8_t>(c));
   return out;
 }
 

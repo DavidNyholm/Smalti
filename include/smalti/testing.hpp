@@ -4,6 +4,8 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include "smalti/app.hpp"
@@ -23,6 +25,11 @@ class Driver {
   void key(Key key, Modifiers modifiers = {});
   // Text typed into the window, as a keyboard or an input method delivers it (after its keys).
   void type(std::string_view utf8);
+  // Puts text on the headless clipboard as another program would: as it is, not cleaned, so
+  // App::clipboard_text() shows what a paste from outside gets.
+  void put_on_clipboard(std::string_view text);
+  // What the headless clipboard holds, as is: what another program would paste.
+  std::optional<std::string> clipboard_contents() const;
   void resize(Size logical, float scale = 1.0f);
 
   // Moves the fake clock forward, running every frame the window asks for on the way.
