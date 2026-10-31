@@ -1,9 +1,11 @@
 // The Win32 backend: windows, input, DPI, the event loop, and presentation. The first frames
 // go through GDI (no GPU device yet); a background thread creates the Direct3D 11 device and,
 // once it exists, every window moves to the GPU compositor.
-#include <imm.h>
 #include <windows.h>
 #include <windowsx.h>
+
+// After windows.h, which it needs; the blank line keeps the formatter from sorting it first.
+#include <imm.h>
 
 #include <algorithm>
 #include <atomic>
