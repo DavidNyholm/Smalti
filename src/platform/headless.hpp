@@ -68,7 +68,7 @@ class HeadlessBackend final : public PlatformBackend {
   void quit() override { quit_ = true; }
   void wake() override { woken_ = true; }
   int64_t now_ns() const override { return now_; }
-  SystemInfo system_info() const override { return {true, false}; }
+  SystemInfo system_info() const override { return {}; }  // dark, motion on, caret blinks
   // A real watch on a real file, read without blocking whenever the fake clock moves or a
   // test calls poll_file_watch(): tests can save a file and see it reload.
   void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {

@@ -153,6 +153,23 @@ float text_width(const Font& font, float size, std::string_view utf8) {
   return width;
 }
 
+std::vector<CaretStop> caret_stops(const Font& font, float size, std::string_view utf8) {
+  const float scale = size / static_cast<float>(font.units_per_em());
+  std::vector<CaretStop> stops;
+  float pen = 0;
+  uint16_t prev = 0;
+  for (size_t i = 0; i < utf8.size();) {
+    const size_t start = i;
+    const uint16_t g = font.glyph_index(next_codepoint(utf8, i));
+    if (prev) pen += static_cast<float>(font.kerning(prev, g)) * scale;
+    stops.push_back({start, pen});
+    pen += static_cast<float>(font.advance(g)) * scale;
+    prev = g;
+  }
+  stops.push_back({utf8.size(), pen});
+  return stops;
+}
+
 float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size, Point origin,
                 std::string_view utf8, Color color, const TextTuning& tuning) {
   const float scale = size / static_cast<float>(font.units_per_em());

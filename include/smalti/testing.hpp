@@ -17,7 +17,9 @@ class Driver {
   explicit Driver(Ref<Window> window);
 
   void move(Point p);
-  void press(Point p, MouseButton button = MouseButton::left);
+  // `clicks`: 2 for a double-click's second press, 3 for a triple-click's third.
+  void press(Point p, MouseButton button = MouseButton::left, Modifiers modifiers = {},
+             int clicks = 1);
   void release(Point p, MouseButton button = MouseButton::left);
   void click(Point p);
   void click(Ref<Widget> widget);  // at the centre of its bounds

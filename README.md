@@ -56,7 +56,7 @@ Every widget is reached through a `Ref<T>`: a checked handle you can copy into a
 - **Smooth and light:** widgets are drawn on the CPU and composited on the GPU (Direct3D 11 on Windows), presented in step with the display. Only what changed is redrawn, and an idle window uses no CPU. The first frame never waits for the GPU driver.
 - **Safe to hold:** `Ref<T>` handles, deferred removal (a callback may remove its own widget or close its own window), one UI thread enforced on every call (except `App::post`, the one call made for other threads), exceptions from callbacks rethrown from `run()` rather than through the OS.
 - **Keyboard first-class:** Tab order, a focus ring shown only to keyboard users, Space and Enter, arrows in sliders and radio groups.
-- **v0.1 widgets:** Label, Button (primary, secondary, ghost, danger), CheckBox, Switch, RadioButton, Slider, ProgressBar (with an indeterminate mode), Separator, Card; layout with Column, Row, Grid and Spacer.
+- **v0.1 widgets:** Label, Button (primary, secondary, ghost, danger), CheckBox, Switch, RadioButton, Slider, ProgressBar (with an indeterminate mode), Separator, Card; layout with Column, Row, Grid and Spacer. In `beta`, for v0.2: TextBox, typed text through the system's input method, and the clipboard.
 - **No dependencies:** the operating system and its SDK, the compiler, CMake. Nothing is downloaded at build time. Direct3D and the other Windows DLLs outside the protected KnownDLLs list are loaded from the system directory only. See [Dependencies and supply chain](docs/Dependencies-and-supply-chain.md).
 
 ## Read more

@@ -74,3 +74,20 @@ TEST(text_glyph_cache_respects_its_budget) {
   CHECK(cache.bytes() <= 64 * 1024);
   CHECK(cache.entries() > 0);
 }
+
+TEST(text_caret_stops_fall_where_glyphs_are_drawn) {
+  const FontSet fonts = load_embedded_fonts();
+  const Font& f = *fonts.regular;
+  const auto empty = caret_stops(f, 14, "");
+  CHECK_EQ(empty.size(), size_t{1});
+  CHECK(empty[0].byte == 0 && empty[0].x == 0.0f);
+  // One stop per character and one after the last, at character boundaries.
+  const auto stops = caret_stops(f, 14, "a\xC3\xA9\xF0\x9F\x98\x80");
+  CHECK_EQ(stops.size(), size_t{4});
+  CHECK(stops[0].byte == 0 && stops[1].byte == 1 && stops[2].byte == 3 && stops[3].byte == 7);
+  CHECK(stops[1].x > 0 && stops[2].x > stops[1].x && stops[3].x > stops[2].x);
+  // The stop between a kerned pair is where the second glyph is drawn; the last is the width.
+  const auto av = caret_stops(f, 14, "AV");
+  CHECK(av[1].x < text_width(f, 14, "A"));
+  CHECK_NEAR(av[2].x, text_width(f, 14, "AV"), 1e-4);
+}

@@ -72,6 +72,17 @@ float draw_text(Canvas& canvas, GlyphCache& cache, const Font& font, float size,
 std::vector<std::string_view> wrap_lines(const Font& font, float size, std::string_view utf8,
                                          float max_width);
 
+// A place the caret can stand in one line: a byte offset at a character boundary, and its x
+// from the line's start, in the units of `size`.
+struct CaretStop {
+  size_t byte;
+  float x;
+};
+// Every caret stop of one line, in order: before each character, where draw_text puts it
+// (after kerning with the one before), and after the last, at text_width. A run of invalid
+// bytes counts as next_codepoint reads it.
+std::vector<CaretStop> caret_stops(const Font& font, float size, std::string_view utf8);
+
 // Decodes one UTF-8 sequence at s[i], advancing i. Invalid bytes become U+FFFD.
 char32_t next_codepoint(std::string_view s, size_t& i);
 

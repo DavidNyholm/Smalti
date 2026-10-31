@@ -73,6 +73,9 @@ class NativeWindow {
 struct SystemInfo {
   bool dark_mode = true;
   bool reduced_motion = false;
+  // How long a text caret stays shown, and then hidden; 0 if it should not blink. 530 ms is
+  // Windows' default, and where the system has no setting of its own.
+  int caret_blink_ms = 530;
 };
 
 // A window's width or height in device pixels from a logical size: whole, at least 1 and at

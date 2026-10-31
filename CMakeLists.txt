@@ -49,7 +49,9 @@ add_library(smalti STATIC
   src/theme/widgets_section.cpp
   src/widgets/controls.cpp
   src/widgets/label.cpp
+  src/widgets/text_edit.cpp
   src/widgets/range.cpp
+  src/widgets/text_box.cpp
   "${smalti_generated}/inter_fonts.cpp"
   "${smalti_generated}/builtin_themes.cpp")
 add_library(smalti::smalti ALIAS smalti)
@@ -161,6 +163,8 @@ if(SMALTI_BUILD_TESTS)
     tests/test_ref.cpp
     tests/test_reload.cpp
     tests/test_text.cpp
+    tests/test_text_box.cpp
+    tests/test_text_edit.cpp
     tests/test_text_input.cpp
     tests/test_clipboard.cpp
     tests/test_theme.cpp

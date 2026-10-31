@@ -34,8 +34,9 @@ enum class StyledWidget : uint8_t {
   separator,
   label,
   card,
+  text_box,
 };
-inline constexpr size_t kStyledWidgetCount = 9;
+inline constexpr size_t kStyledWidgetCount = 10;
 
 // Each widget's colour properties, in the order of its schema's names below.
 struct ButtonSlot {
@@ -65,7 +66,10 @@ struct LabelSlot {
 struct CardSlot {
   enum : uint8_t { fill, border };
 };
-inline constexpr size_t kMaxStyleColors = 5;
+struct TextBoxSlot {
+  enum : uint8_t { fill, border, text, placeholder, selection, caret };
+};
+inline constexpr size_t kMaxStyleColors = 6;
 
 // What a theme file may set for one widget.
 struct WidgetSchema {
@@ -95,7 +99,7 @@ std::optional<StyleProperty> find_property(const WidgetSchema& schema, StyleStat
 const WidgetSchema& schema_of(StyledWidget w);
 // The widget's first entry in WidgetStyles::all; its variants follow it.
 size_t style_index(StyledWidget w, size_t variant = 0);
-inline constexpr size_t kStyledVariantCount = 16;
+inline constexpr size_t kStyledVariantCount = 17;
 
 // A disabled control draws at this opacity unless its style says otherwise.
 inline constexpr float kDisabledOpacity = 0.45f;

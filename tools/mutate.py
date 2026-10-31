@@ -870,6 +870,121 @@ MUTATIONS = [
         "clipboard: copied text is not made plain",
         [("set_clipboard_text(detail::plain_text(utf8));", "set_clipboard_text(utf8);")],
     ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: the caret steps one byte, not one character",
+        [("  while (i < text_.size() && continuation(text_[i])) ++i;\n  return i;", "  return i;")],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: a word move does not skip the spaces after a word",
+        [
+            (
+                "  while (pos < text_.size() && kind_at(pos) == CharKind::space) pos = next(pos);\n  return pos;",
+                "  return pos;",
+            )
+        ],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: punctuation counts as part of a word",
+        [("return alnum || cp == '_' ? CharKind::word : CharKind::punctuation;", "return CharKind::word;")],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: typing after a space joins the word before it in one undo step",
+        [
+            (
+                "        return false;\n      }\n      last.added += step.added;",
+                "      }\n      last.added += step.added;",
+            )
+        ],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: backspaces in a row are separate undo steps",
+        [("      if (step.at + step.removed.size() != last.at) return false;", "      return false;")],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: a caret move does not end the typing step",
+        [("  if (!extend) anchor_ = caret;\n  open_ = false;", "  if (!extend) anchor_ = caret;")],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: the length limit counts bytes",
+        [
+            (
+                "  return static_cast<size_t>(\n      std::count_if(s.begin(), s.end(), [](char c) { return !continuation(c); }));",
+                "  return s.size();",
+            )
+        ],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: a new edit keeps the redo history",
+        [
+            (
+                "  caret_ = anchor_ = step.caret_after;\n  redo_.clear();",
+                "  caret_ = anchor_ = step.caret_after;",
+            )
+        ],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: pasted line breaks stay",
+        [("    if (cp == '\\n' || cp == '\\t') {", "    if (cp == '\\t') {")],
+    ),
+    (
+        "render/text.cpp",
+        "caret stops: a kerned pair's stop is before the kerning",
+        [
+            (
+                "    if (prev) pen += static_cast<float>(font.kerning(prev, g)) * scale;\n    stops.push_back({start, pen});",
+                "    stops.push_back({start, pen});\n    if (prev) pen += static_cast<float>(font.kerning(prev, g)) * scale;",
+            )
+        ],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: the caret never stops blinking",
+        [("  if (elapsed >= kBlinkForNs) return true;", "")],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: input does not show the caret afresh",
+        [("  blink_start_ns_ = now_ns();  // the caret shows at once after any input\n", "")],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: a password can be copied",
+        [
+            (
+                "  if (password_ || !edit_->has_selection()) return;\n  App::current().set_clipboard_text",
+                "  if (!edit_->has_selection()) return;\n  App::current().set_clipboard_text",
+            )
+        ],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: no scrolling to the caret",
+        [("  if (caret - scroll_ > width) scroll_ = caret - width;", "")],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: a triple click selects a word",
+        [("      if (e.clicks >= 3) {", "      if (e.clicks >= 4) {")],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: Shift+click does not extend",
+        [("        edit_->move_to(byte, e.modifiers.shift);", "        edit_->move_to(byte, false);")],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: a typing pause does not end the undo step",
+        [("  if (now_ns() - last_edit_ns_ >= kTypingPauseNs) edit_->break_step();", "")],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

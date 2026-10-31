@@ -224,6 +224,11 @@ void Widget::redraw_after(std::chrono::nanoseconds delay) {
   ws->redraw_at(id_, delay.count() > INT64_MAX - now ? INT64_MAX : now + delay.count());
 }
 
+int64_t Widget::now_ns() const {
+  const auto* ws = detail::window_state_of(*this);
+  return ws ? ws->now() : 0;
+}
+
 int64_t Widget::frame_time_ns() const {
   const auto* ws = detail::window_state_of(*this);
   return ws ? ws->frame_time : 0;

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
@@ -43,6 +44,7 @@ constexpr int kMaxMessagesPerTurn = 64;
 constexpr float kDefaultDpi = 96.0f;
 constexpr UINT_PTR kModalLoopTimer = 1;  // keeps frames coming while a window is dragged
 constexpr double kFallbackRefreshHz = 60.0;
+constexpr int kMaxClicks = 3;  // a triple click; presses after it count as more triple clicks
 constexpr float kWheelLinePixels = 40.0f;       // one wheel notch of one line, in logical pixels
 constexpr DWORD kDwmUseImmersiveDarkMode = 20;  // DWMWA_USE_IMMERSIVE_DARK_MODE
 
@@ -93,6 +95,8 @@ Key map_key(WPARAM vk) {
       return Key::backspace;
     case VK_DELETE:
       return Key::delete_;
+    case VK_INSERT:
+      return Key::insert;
     case VK_LEFT:
       return Key::left;
     case VK_RIGHT:
@@ -207,7 +211,8 @@ class Win32Window final : public NativeWindow {
   void make_dib(int w, int h);
   void drop_buffers();  // after a failed resize: no frame buffer until the next one succeeds
   void run_frame(int64_t now);
-  void place_ime();  // puts the IME's windows at ime_caret_
+  void place_ime();            // puts the IME's windows at ime_caret_
+  int count_click(LPARAM lp);  // 1, 2 or 3: how many left presses in a row this one makes
 
   Win32Backend& backend_;
   WindowEvents& events_;
@@ -225,6 +230,10 @@ class Win32Window final : public NativeWindow {
   bool gpu_ready_ = false;
   bool tracking_leave_ = false;
   HCURSOR cursor_ = nullptr;
+  // The last left press, for counting double and triple clicks.
+  DWORD last_press_ms_ = 0;
+  POINT last_press_{};
+  int last_clicks_ = 0;
 
   // The CPU path: a DIB the core draws into, copied to the window with GDI.
   HDC mem_dc_ = nullptr;
@@ -538,6 +547,20 @@ void Win32Window::place_ime() {
   ImmReleaseContext(hwnd_, context);
 }
 
+int Win32Window::count_click(LPARAM lp) {
+  // Windows reports double clicks (WM_LBUTTONDBLCLK) but not triple ones, so presses are
+  // counted here, within the system's double-click time and distance.
+  const auto now = static_cast<DWORD>(GetMessageTime());
+  const POINT at{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+  const bool in_a_row = last_clicks_ > 0 && now - last_press_ms_ <= GetDoubleClickTime() &&
+                        std::abs(at.x - last_press_.x) <= GetSystemMetrics(SM_CXDOUBLECLK) / 2 &&
+                        std::abs(at.y - last_press_.y) <= GetSystemMetrics(SM_CYDOUBLECLK) / 2;
+  last_clicks_ = in_a_row ? std::min(last_clicks_ + 1, kMaxClicks) : 1;
+  last_press_ms_ = now;
+  last_press_ = at;
+  return last_clicks_;
+}
+
 void Win32Window::set_dark_frame(bool dark) {
   if (auto fn = dwm_set_attribute()) {
     const BOOL value = dark ? TRUE : FALSE;
@@ -579,7 +602,7 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
                             : msg == WM_MBUTTONDOWN ? MouseButton::middle
                                                     : MouseButton::left;
       events_.on_mouse_button(b, true, device_point(), current_modifiers(),
-                              msg == WM_LBUTTONDBLCLK ? 2 : 1);
+                              b == MouseButton::left ? count_click(lp) : 1);
       return 0;
     }
     case WM_LBUTTONUP:
@@ -834,6 +857,8 @@ SystemInfo Win32Backend::system_info() const {
   BOOL animations = TRUE;
   if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0))
     info.reduced_motion = !animations;
+  const UINT blink = GetCaretBlinkTime();  // INFINITE: the user turned blinking off
+  if (blink != 0) info.caret_blink_ms = blink == INFINITE ? 0 : static_cast<int>(blink);
   return info;
 }
 

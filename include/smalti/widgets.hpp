@@ -2,6 +2,8 @@
 // works by keyboard as well as by mouse.
 #pragma once
 
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,6 +12,10 @@
 #include "smalti/widget.hpp"
 
 namespace smalti {
+
+namespace detail {
+class TextEdit;
+}
 
 enum class TextRole : uint8_t {
   body,       // regular text
@@ -212,6 +218,84 @@ class ProgressBar : public Widget {
   float value_;
   bool indeterminate_ = false;
   Motion fill_, sweep_;
+};
+
+// Every field has a default, so designated initializers may leave any out.
+struct TextBoxOptions {
+  std::string text = {};
+  std::string placeholder = {};  // shown, muted, while the text is empty
+  bool password = false;         // shows a dot for each character, and refuses copy and cut
+  size_t max_length = 0;         // in characters; 0 for no limit
+};
+
+// A one-line text field: typing and input methods, selection by mouse and keyboard, words,
+// the clipboard, and undo. Pasted line breaks and tabs become spaces.
+class TextBox : public Widget {
+ public:
+  explicit TextBox(TextBoxOptions options = {});
+  explicit TextBox(std::string placeholder);
+  ~TextBox() override;
+
+  // After each change the user makes (typing, erasing, pasting, cutting, undo and redo), with
+  // the new text. set_text() does not call it.
+  TextBox& on_change(Callback<void(const std::string&)> fn);
+  // When the user presses Enter, with the text.
+  TextBox& on_submit(Callback<void(const std::string&)> fn);
+  // Replaces the text, made one line and cut to the length limit; the caret goes to the end
+  // and undo starts over.
+  void set_text(std::string_view text);
+  const std::string& text() const;
+  void set_placeholder(std::string placeholder);
+  void set_password(bool password);
+  void set_max_length(size_t characters);  // cuts the text if it is longer; undo starts over
+  void select_all();
+
+  Size measure(Size available) override;
+  void arrange(Rect bounds) override;
+  void paint(Painter& p) override;
+  bool on_mouse(const MouseEvent& e) override;
+  bool on_key(const KeyEvent& e) override;
+  bool on_text(std::string_view utf8) override;
+  bool accepts_text() const override { return enabled(); }
+  Rect text_caret() const override;
+  void on_focus_changed(bool gained) override;
+  void on_hover_changed(bool hovered) override;
+  bool focusable() const override { return enabled(); }
+  Cursor cursor() const override { return Cursor::text; }
+
+ private:
+  TextStyle text_style() const;
+  Rect text_area() const;  // inside the border and the inset, where the text shows
+  float text_origin() const;
+  void refresh_stops() const;
+  size_t stop_of(size_t byte) const;
+  size_t byte_at(float x) const;
+  void keep_caret_visible();
+  bool caret_shown();  // and asks for the frame where the caret blinks next
+  void edge_scroll();  // while a drag selects past either end
+  void caret_moved();  // after any change of caret or selection
+  void edited();       // after the text changed; also calls on_change
+  void end_step_after_pause();
+  void copy();
+  void cut();
+  void paste();
+
+  std::unique_ptr<detail::TextEdit> edit_;
+  std::string placeholder_;
+  bool password_;
+  Callback<void(const std::string&)> on_change_, on_submit_;
+  // Caret stops of the text as shown: x from the text's start, and the text's byte at each.
+  mutable std::string shown_;
+  mutable std::vector<float> stop_x_;
+  mutable std::vector<size_t> stop_byte_;
+  mutable float stops_size_ = 0;  // the font size they were measured at; 0 when stale
+  float scroll_ = 0;              // how far the text is moved left to keep the caret in view
+  int64_t blink_start_ns_ = 0;    // when the caret was last shown afresh
+  int64_t last_edit_ns_ = 0;      // a pause after it ends the undo step typing adds to
+  bool selecting_ = false;        // a press is dragging a selection
+  float drag_x_ = 0;
+  int64_t edge_scroll_ns_ = 0;  // when a drag past an end last scrolled
+  Motion hover_;
 };
 
 enum class Orientation : uint8_t { horizontal, vertical };

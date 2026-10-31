@@ -10,7 +10,8 @@ include/smalti/app.hpp         App, AppOptions, MemoryStats
 include/smalti/window.hpp      Window, WindowOptions
 include/smalti/widget.hpp      Widget, Motion, Align
 include/smalti/layout.hpp      Column, Row, Spacer, Grid, Card
-include/smalti/widgets.hpp     Label, Button, CheckBox, Switch, RadioButton, Slider, ProgressBar, Separator
+include/smalti/widgets.hpp     Label, Button, CheckBox, Switch, RadioButton, Slider, ProgressBar, Separator,
+                               TextBox
 include/smalti/painter.hpp     Painter, TextStyle: what custom widgets draw with
 include/smalti/theme.hpp       Theme, the built-in Dark, Black and Light, and reading theme files
 include/smalti/ref.hpp         Ref<T>, WidgetId, the contract handler

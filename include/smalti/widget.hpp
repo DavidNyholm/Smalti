@@ -144,6 +144,9 @@ class Widget {
   void redraw_at(int64_t time_ns);
   void redraw_after(std::chrono::nanoseconds delay);
   int64_t frame_time_ns() const;
+  // The time now, on the frame clock: for timing input, which happens between frames, when
+  // frame_time_ns() is still the last frame's.
+  int64_t now_ns() const;
 
  private:
   friend class Window;

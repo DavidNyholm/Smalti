@@ -68,7 +68,7 @@ inline void build_sidebar(sm::App& app, sm::Ref<Sidebar> side, const FileTheme* 
 inline void build_content(sm::App& app, sm::Ref<sm::Column> content) {
   content->add<sm::Label>("Gallery", sm::LabelOptions{.role = sm::TextRole::heading});
   content->add<sm::Label>(
-      "Every control in v0.1. Try it with the keyboard too: Tab, Space, Enter and the arrows.",
+      "Every built-in control. Try it with the keyboard too: Tab, Space, Enter and the arrows.",
       sm::LabelOptions{.role = sm::TextRole::secondary, .wrap = true});
 
   auto row = content->add<sm::Row>(sm::StackOptions{.spacing = 16, .align = sm::Align::start});
@@ -112,6 +112,18 @@ inline void build_content(sm::App& app, sm::Ref<sm::Column> content) {
   grid->add<sm::Label>("Working");
   auto busy = grid->add<sm::ProgressBar>();
   busy->set_indeterminate(true);
+  grid->add<sm::Label>("");
+  grid->add<sm::Label>("Name");
+  auto name = grid->add<sm::TextBox>(sm::TextBoxOptions{.placeholder = "Your name"});
+  auto length = grid->add<sm::Label>("", sm::LabelOptions{.role = sm::TextRole::secondary});
+  name->on_change([length](const std::string& text) {
+    size_t characters = 0;  // UTF-8: every byte that does not continue a character
+    for (const char c : text) characters += (static_cast<unsigned char>(c) & 0xC0) != 0x80;
+    length->set_text(characters ? std::to_string(characters) : "");
+  });
+  grid->add<sm::Label>("Password");
+  grid->add<sm::TextBox>(sm::TextBoxOptions{.text = "hunter2", .password = true});
+  grid->add<sm::Label>("");
   slider->on_change([readout, progress](float v) {
     readout->set_text(std::to_string(static_cast<int>(std::lround(v))));
     progress->set_value(v / 100.0f);

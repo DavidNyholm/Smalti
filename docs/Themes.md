@@ -133,7 +133,7 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 
 - **Keys** name a widget, or a widget and one of its variants: `"Button"` styles every button, `"Button.primary"` primary buttons only. A variant's setting wins over the widget's, in whichever order they are written.
 - **Properties** at the top of a widget's style are its colours at rest, and `radius` for the widgets that have one. Their values are written as token values are: a colour as `#rrggbb`, `#rrggbbaa`, a colour token, or either with an opacity; `radius` as a number or a radius token.
-- **States** are blocks beside the properties: `hover`, `pressed`, `checked`, `focused` and `disabled`, each setting colours for that state. A state's colour fades in with the widget's own motion (under the pointer, over `motion.fast`). They apply in that order, so where `hover` and `checked` both set a colour, a checked box under the pointer shows the checked one. `focused` means keyboard focus, while the focus ring shows, and applies at once.
+- **States** are blocks beside the properties: `hover`, `pressed`, `checked`, `focused` and `disabled`, each setting colours for that state. A state's colour fades in with the widget's own motion (under the pointer, over `motion.fast`). They apply in that order, so where `hover` and `checked` both set a colour, a checked box under the pointer shows the checked one. `focused` means keyboard focus, while the focus ring shows, and applies at once; for a `TextBox` it means having focus at all, from the mouse too, since it takes text then.
 - **Disabled** can set colours, which are then drawn as they are, and `opacity`, a percentage that a disabled control's colours are multiplied by: `"45%"` unless set.
 - **A state you do not set keeps its built-in look.** Most built-in states are tokens (a primary button's hover is `accent.hover`, so a file that changes its fill should set its hover fill too). Three are relative to the colour below them: under the pointer, secondary and ghost buttons lay `state.hover` (half again as strong, at most opaque) over their fill, whatever the fill is; a pressed button of any variant darkens its hover fill with 12% black; and a switch's knob moves halfway from its colour towards `text.primary`.
 
@@ -148,6 +148,7 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 | `Separator` | | `fill` | | |
 | `Label` | `body`, `secondary`, `caption`, `title`, `heading` | `text` | | disabled |
 | `Card` | | `fill`, `border` | yes | |
+| `TextBox` (in `beta`) | | `fill`, `border`, `text`, `placeholder`, `selection` (behind selected text), `caret` | yes | hover, focused, disabled |
 
 `focus` is the colour of the focus ring. The built-in look, which a style changes:
 
@@ -160,6 +161,7 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 - **Separator:** fill `line.divider`.
 - **Label:** `text.primary` for body, title and heading; `text.secondary` for secondary; `text.muted` for caption. The sizes are the `font` tokens.
 - **Card:** fill `surface.raised`, border `line.border`, radius `radius.card`; its shadow or top highlight follow the `depth` tokens.
+- **TextBox:** radius `radius.control`. Fill `surface.raised`. Border `line.border`, under the pointer `text.muted`, focused `accent`. Text `text.primary`, placeholder `text.muted`, selection `accent 35%`, caret `text.primary`.
 - **Every control:** text `text.primary` where not given above, focus `accent`, disabled at 45%.
 
 In code, the section's rules are `Theme::widget_styles`, a list of `StyleRule` (widget, variant, state, property, value), which a program can also build itself. A rule that names no real widget, variant, state or property is a contract violation when the theme is set.

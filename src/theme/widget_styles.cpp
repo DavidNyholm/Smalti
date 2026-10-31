@@ -25,6 +25,8 @@ constexpr std::string_view kProgressColors[] = {"track", "fill"};
 constexpr std::string_view kSeparatorColors[] = {"fill"};
 constexpr std::string_view kLabelColors[] = {"text"};
 constexpr std::string_view kCardColors[] = {"fill", "border"};
+constexpr std::string_view kTextBoxColors[] = {"fill",        "border",    "text",
+                                               "placeholder", "selection", "caret"};
 
 constexpr uint8_t kButtonStates = state_bit(StyleState::hover) | state_bit(StyleState::pressed) |
                                   state_bit(StyleState::focused) | state_bit(StyleState::disabled);
@@ -33,6 +35,8 @@ constexpr uint8_t kToggleStates = state_bit(StyleState::hover) | state_bit(Style
 constexpr uint8_t kSliderStates =
     state_bit(StyleState::hover) | state_bit(StyleState::focused) | state_bit(StyleState::disabled);
 constexpr uint8_t kDisabledOnly = state_bit(StyleState::disabled);
+// A text box is focused whenever it has focus, by mouse or keyboard: it takes text then.
+constexpr uint8_t kTextBoxStates = kSliderStates;
 
 constexpr WidgetSchema kSchemas[] = {
     {"Button", kButtonVariants, kButtonColors, true, kButtonStates},
@@ -44,6 +48,7 @@ constexpr WidgetSchema kSchemas[] = {
     {"Separator", {}, kSeparatorColors, false, 0},
     {"Label", kLabelVariants, kLabelColors, false, kDisabledOnly},
     {"Card", {}, kCardColors, true, 0},
+    {"TextBox", {}, kTextBoxColors, true, kTextBoxStates},
 };
 static_assert(std::size(kSchemas) == kStyledWidgetCount);
 static_assert(std::size(kButtonVariants) == static_cast<size_t>(ButtonVariant::danger) + 1);
@@ -68,6 +73,8 @@ constexpr Color kTransparent{0, 0, 0, 0};
 constexpr float kHoverTintStrength = 1.5f;
 // A pressed button darkens by this much black over its fill.
 constexpr Color kPressShade{0, 0, 0, 0.12f};
+// Selected text sits on the accent at this opacity: clearly marked, and the text stays legible.
+constexpr float kSelectionOpacity = 0.35f;
 // A danger button's fill is its text colour at this opacity, and this much more under the pointer.
 constexpr float kDangerFill = 0.14f, kDangerFillHoverGain = 0.06f;
 constexpr float kCheckBoxRadius = 5;
@@ -209,6 +216,23 @@ void defaults(StyleState stage, StyledWidget w, size_t variant, const Theme& th,
         set(s, CardSlot::border, stage, th.border);
       }
       return;
+    case StyledWidget::text_box: {
+      using S = TextBoxSlot;
+      if (at_rest) {
+        s.radius = th.radius_control;
+        set(s, S::fill, stage, th.raised);
+        set(s, S::border, stage, th.border);
+        set(s, S::text, stage, th.text);
+        set(s, S::placeholder, stage, th.text_muted);
+        set(s, S::selection, stage, th.accent.with_alpha(kSelectionOpacity));
+        set(s, S::caret, stage, th.text);
+      } else if (stage == StyleState::hover) {
+        set(s, S::border, stage, th.text_muted);
+      } else if (stage == StyleState::focused) {
+        set(s, S::border, stage, th.accent);
+      }
+      return;
+    }
   }
 }
 

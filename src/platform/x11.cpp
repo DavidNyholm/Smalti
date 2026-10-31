@@ -38,6 +38,7 @@ constexpr float kWheelNotchPixels = 120.0f;  // one wheel notch, in logical pixe
 constexpr unsigned long kDoubleClickMs = 400;
 // Keysyms from 0x01000000 up are Unicode: 0x01000000 plus the code point.
 constexpr KeySym kUnicodeKeysym = 0x01000000;
+constexpr int kMaxClicks = 3;        // a triple click; presses after it count as more triple clicks
 constexpr int kDoubleClickSlop = 4;  // pixels the pointer may move between the two clicks
 constexpr int kBitsPerPixel = 32;
 constexpr long kEventMask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
@@ -96,6 +97,8 @@ Key map_keysym(KeySym k) {
       return Key::backspace;
     case XK_Delete:
       return Key::delete_;
+    case XK_Insert:
+      return Key::insert;
     case XK_Left:
       return Key::left;
     case XK_Right:
@@ -183,6 +186,7 @@ class X11Window final : public NativeWindow {
   int64_t last_frame_ = 0;
   Time last_press_time_ = 0;
   int last_press_x_ = 0, last_press_y_ = 0;
+  int last_clicks_ = 0;                  // presses in a row, up to kMaxClicks
   std::vector<unsigned int> keys_down_;  // to tell auto-repeat from a fresh press
   XIC ic_ = nullptr;                     // the input context; null without an input method
   bool text_input_ = false;              // a widget that takes text has focus
@@ -415,11 +419,12 @@ void X11Window::handle(XEvent& e) {
                                                 : MouseButton::middle;
       int clicks = 1;
       if (down && button == MouseButton::left) {
-        if (e.xbutton.time - last_press_time_ <= kDoubleClickMs &&
+        if (last_clicks_ > 0 && e.xbutton.time - last_press_time_ <= kDoubleClickMs &&
             std::abs(e.xbutton.x - last_press_x_) <= kDoubleClickSlop &&
             std::abs(e.xbutton.y - last_press_y_) <= kDoubleClickSlop) {
-          clicks = 2;
+          clicks = std::min(last_clicks_ + 1, kMaxClicks);
         }
+        last_clicks_ = clicks;
         last_press_time_ = e.xbutton.time;
         last_press_x_ = e.xbutton.x;
         last_press_y_ = e.xbutton.y;

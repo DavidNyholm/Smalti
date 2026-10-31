@@ -49,8 +49,8 @@ void Driver::move(Point p) {
   rethrow_failure();
 }
 
-void Driver::press(Point p, MouseButton button) {
-  native(window_).events().on_mouse_button(button, true, device(window_, p), {}, 1);
+void Driver::press(Point p, MouseButton button, Modifiers modifiers, int clicks) {
+  native(window_).events().on_mouse_button(button, true, device(window_, p), modifiers, clicks);
   backend().host().after_events();
   rethrow_failure();
 }

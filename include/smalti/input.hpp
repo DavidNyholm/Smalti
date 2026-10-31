@@ -23,7 +23,7 @@ struct MouseEvent {
   MouseButton button = MouseButton::none;
   Modifiers modifiers;
   Point wheel;     // scroll distance in logical pixels, positive = down and right
-  int clicks = 1;  // 2 for the second press of a double-click
+  int clicks = 1;  // 2 for the second press of a double-click, 3 for a triple-click's third
 };
 
 // Keys that have a meaning in widgets. Letters and digits are reported for shortcuts; typed text
@@ -72,6 +72,7 @@ enum class Key : uint16_t {
   tab,
   backspace,
   delete_,
+  insert,
   left,
   right,
   up,
