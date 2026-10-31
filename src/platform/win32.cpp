@@ -1,6 +1,7 @@
 // The Win32 backend: windows, input, DPI, the event loop, and presentation. The first frames
 // go through GDI (no GPU device yet); a background thread creates the Direct3D 11 device and,
 // once it exists, every window moves to the GPU compositor.
+#include <imm.h>
 #include <windows.h>
 #include <windowsx.h>
 
@@ -17,6 +18,7 @@
 
 #include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
+#include "platform/text_input.hpp"
 #include "platform/win32_gpu.hpp"
 
 namespace smalti::platform {
@@ -168,6 +170,7 @@ class Win32Window final : public NativeWindow {
   void set_cursor(Cursor c) override;
   void capture_mouse(bool capture) override;
   void set_dark_frame(bool dark) override;
+  void set_text_input(bool active, RectI caret) override;
   float scale() const override { return scale_; }
   size_t gpu_bytes() const override { return gpu_ ? gpu_->bytes() : 0; }
 
@@ -201,6 +204,7 @@ class Win32Window final : public NativeWindow {
   void make_dib(int w, int h);
   void drop_buffers();  // after a failed resize: no frame buffer until the next one succeeds
   void run_frame(int64_t now);
+  void place_ime();  // puts the IME's windows at ime_caret_
 
   Win32Backend& backend_;
   WindowEvents& events_;
@@ -212,6 +216,9 @@ class Win32Window final : public NativeWindow {
   bool requested_ = false;
   int64_t last_frame_ = 0;
   bool in_modal_loop_ = false;
+  detail::Utf16Joiner typed_;  // WM_CHAR delivers UTF-16, a character outside the BMP in two
+  bool ime_on_ = false;        // the window has an input context: a text widget has focus
+  RectI ime_caret_{};          // where the IME's windows go, in client pixels
   bool gpu_ready_ = false;
   bool tracking_leave_ = false;
   HCURSOR cursor_ = nullptr;
@@ -335,6 +342,9 @@ Win32Window::Win32Window(Win32Backend& backend, const WindowOptions& options, Wi
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     refresh_hz_ = refresh_hz(hwnd_);
+    // No input method until a widget that takes text has focus: an IME never opens over a
+    // button (set_text_input switches it on).
+    ImmAssociateContextEx(hwnd_, nullptr, 0);
     RECT client;
     GetClientRect(hwnd_, &client);
     resize_buffers(client.right, client.bottom);
@@ -484,6 +494,42 @@ void Win32Window::capture_mouse(bool capture) {
     ReleaseCapture();
 }
 
+void Win32Window::set_text_input(bool active, RectI caret) {
+  ime_caret_ = caret;
+  if (active != ime_on_) {
+    if (!active) {
+      // Text still being composed belonged to the widget that lost focus: drop it rather than
+      // commit it to whatever has focus now.
+      if (const HIMC context = ImmGetContext(hwnd_)) {
+        ImmNotifyIME(context, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
+        ImmReleaseContext(hwnd_, context);
+      }
+    }
+    ImmAssociateContextEx(hwnd_, nullptr, active ? IACE_DEFAULT : 0);
+    ime_on_ = active;
+  }
+  if (ime_on_) place_ime();
+}
+
+void Win32Window::place_ime() {
+  const HIMC context = ImmGetContext(hwnd_);
+  if (!context) return;
+  // The text being composed starts at the caret; the candidate list goes below it, and never
+  // over the caret itself.
+  COMPOSITIONFORM composition{};
+  composition.dwStyle = CFS_POINT;
+  composition.ptCurrentPos = {ime_caret_.x, ime_caret_.y};
+  ImmSetCompositionWindow(context, &composition);
+  CANDIDATEFORM candidates{};
+  candidates.dwIndex = 0;
+  candidates.dwStyle = CFS_EXCLUDE;
+  candidates.ptCurrentPos = {ime_caret_.x, ime_caret_.y + ime_caret_.h};
+  candidates.rcArea = {ime_caret_.x, ime_caret_.y, ime_caret_.x + ime_caret_.w,
+                       ime_caret_.y + ime_caret_.h};
+  ImmSetCandidateWindow(context, &candidates);
+  ImmReleaseContext(hwnd_, context);
+}
+
 void Win32Window::set_dark_frame(bool dark) {
   if (auto fn = dwm_set_attribute()) {
     const BOOL value = dark ? TRUE : FALSE;
@@ -563,6 +609,15 @@ LRESULT Win32Window::handle(UINT msg, WPARAM wp, LPARAM lp) {
         break;  // Alt+F4 and the system menu still work
       return 0;
     }
+    case WM_CHAR: {
+      const std::string text = typed_.push(static_cast<char16_t>(wp));
+      if (!text.empty()) events_.on_text(text);
+      return 0;
+    }
+    case WM_IME_STARTCOMPOSITION:
+      // Placed again as composing starts: some IMEs reset their windows' position then.
+      if (ime_on_) place_ime();
+      break;
     case WM_SETFOCUS:
     case WM_KILLFOCUS:
       events_.on_focus(msg == WM_SETFOCUS);

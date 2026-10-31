@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "core/state.hpp"
+#include "platform/text_input.hpp"
 #include "smalti/app.hpp"
 
 namespace smalti {
@@ -239,6 +240,7 @@ void WindowState::draw_frame(int64_t frame_time_ns) {
         {0, 0, static_cast<float>(width_px) / scale, static_cast<float>(height_px) / scale});
     dirty.assign(1, RectI{0, 0, width_px, height_px});
   }
+  sync_text_input();  // a new layout can move the caret without the widget saying so
   if (dirty.empty() || frame.empty()) return;
   // Paint from a batch of its own: a widget that invalidates while painting adds to `dirty` for
   // the next frame instead of changing the list being drawn.
@@ -281,6 +283,18 @@ void WindowState::focus(Widget* w) {
   if (old) old->on_focus_changed(false);
   // The old widget's hook may have moved focus on, or hidden w: then w never had it.
   if (w && focused == id) w->on_focus_changed(true);
+  sync_text_input();
+}
+
+void WindowState::sync_text_input() {
+  if (!native) return;
+  Widget* f = find(focused);
+  const bool active = f && eligible(*f) && f->accepts_text();
+  const RectI caret = active ? to_device(f->text_caret(), scale) : RectI{};
+  if (active == text_input_active && caret == text_input_caret) return;
+  text_input_active = active;
+  text_input_caret = caret;
+  native->set_text_input(active, caret);
 }
 
 void WindowState::cancel_press() {
@@ -451,6 +465,15 @@ void WindowState::on_key(const KeyEvent& e) {
     for (Widget* w = f; w; w = Tree::parent_of(*w)) {
       if (w->enabled() && w->on_key(e)) break;
     }
+  });
+}
+
+void WindowState::on_text(std::string_view utf8) {
+  app.state().guarded([&] {
+    const std::string text = typed_text(utf8);
+    if (text.empty()) return;
+    Widget* f = find(focused);
+    if (f && eligible(*f)) f->on_text(text);
   });
 }
 

@@ -26,6 +26,10 @@ class HeadlessWindow final : public NativeWindow {
   void set_cursor(Cursor c) override { cursor_ = c; }
   void capture_mouse(bool) override {}
   void set_dark_frame(bool) override {}
+  void set_text_input(bool active, RectI caret) override {
+    text_input_ = active;
+    caret_ = caret;
+  }
   float scale() const override { return scale_; }
 
   void resize(Size logical, float scale);
@@ -36,6 +40,8 @@ class HeadlessWindow final : public NativeWindow {
   const detail::Bitmap& bitmap() const { return bitmap_; }
   int presents() const { return presents_; }
   Cursor cursor() const { return cursor_; }
+  bool text_input() const { return text_input_; }
+  RectI text_caret() const { return caret_; }
 
  private:
   HeadlessBackend& backend_;
@@ -45,6 +51,8 @@ class HeadlessWindow final : public NativeWindow {
   bool requested_ = false;
   int presents_ = 0;
   Cursor cursor_ = Cursor::arrow;
+  bool text_input_ = false;
+  RectI caret_{};
 };
 
 class HeadlessBackend final : public PlatformBackend {

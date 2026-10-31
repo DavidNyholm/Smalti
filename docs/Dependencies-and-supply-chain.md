@@ -5,7 +5,7 @@ The goal: nothing a user builds or runs because of smalti can be swapped for som
 ## What smalti uses
 
 - **The operating system and its SDK.**
-  - *Windows:* `user32`, `gdi32` and `advapi32` are linked; they are on Windows' protected KnownDLLs list. Direct3D 11 (`d3d11.dll`) and DWM (`dwmapi.dll`) are not on that list, so they are loaded at run time from the system directory only (`LOAD_LIBRARY_SEARCH_SYSTEM32`): a DLL planted next to an application is never picked up.
+  - *Windows:* `user32`, `gdi32`, `advapi32` and `imm32` (the input method interface) are linked; they are on Windows' protected KnownDLLs list. Direct3D 11 (`d3d11.dll`) and DWM (`dwmapi.dll`) are not on that list, so they are loaded at run time from the system directory only (`LOAD_LIBRARY_SEARCH_SYSTEM32`): a DLL planted next to an application is never picked up.
   - *Linux:* `libX11`, linked.
 - **The compiler, its standard library, and CMake.**
 - **Nothing else.** No package manager, no FetchContent of dependencies, no submodules, no build step that touches the network.

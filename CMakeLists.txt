@@ -31,6 +31,7 @@ add_library(smalti STATIC
   src/core/painter.cpp
   src/core/registry.cpp
   src/core/testing.cpp
+  src/platform/text_input.cpp
   src/core/widget.cpp
   src/core/window.cpp
   src/platform/backend.cpp
@@ -74,7 +75,7 @@ elseif(WIN32)
   target_compile_definitions(smalti PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
   # Only system DLLs on Windows' protected KnownDLLs list are linked directly. Direct3D, DXGI
   # and DWM are loaded at run time from the system directory (see SECURITY.md).
-  target_link_libraries(smalti PRIVATE user32 gdi32 advapi32)
+  target_link_libraries(smalti PRIVATE user32 gdi32 advapi32 imm32)
 elseif(UNIX AND NOT APPLE)
   find_package(X11 REQUIRED)
   target_sources(smalti PRIVATE src/platform/x11.cpp)
@@ -159,6 +160,7 @@ if(SMALTI_BUILD_TESTS)
     tests/test_ref.cpp
     tests/test_reload.cpp
     tests/test_text.cpp
+    tests/test_text_input.cpp
     tests/test_theme.cpp
     tests/test_timing.cpp
     tests/test_widgets.cpp)

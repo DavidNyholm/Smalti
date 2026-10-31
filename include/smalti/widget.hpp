@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -96,6 +97,17 @@ class Widget {
 
   virtual bool on_mouse(const MouseEvent& e);  // true if handled
   virtual bool on_key(const KeyEvent& e);      // true if handled
+  // Text the user typed, in UTF-8, sent to the focused widget: a character, or a whole word
+  // from an input method. Separate from keys, since a key may type nothing and one character may
+  // take several keys (a dead key, a compose sequence, an IME). Control characters never arrive
+  // here: Tab, Enter, Backspace and Ctrl combinations are keys. True if handled.
+  virtual bool on_text(std::string_view utf8);
+  // Whether this widget takes typed text. While it has focus, the window's input method (an
+  // IME) is switched on and its windows are placed at text_caret(); otherwise it stays off, so
+  // an IME never opens over a button.
+  virtual bool accepts_text() const { return false; }
+  // Where the caret is, in window coordinates, for the input method's windows.
+  virtual Rect text_caret() const;
   virtual void on_focus_changed(bool gained);
   virtual void on_hover_changed(bool hovered);
   virtual bool focusable() const { return false; }
@@ -123,6 +135,8 @@ class Widget {
   float at(const Motion& m) const;  // the motion's value at the current frame
   // Asks for one more frame after this one, for animations with no end (indeterminate progress).
   void keep_animating();
+  // Tells the window that text_caret() has moved, so the input method's windows follow it.
+  void text_caret_moved();
   // Asks for this widget to be drawn again at a time on the frame clock (frame_time_ns()), or
   // after a delay from now: one frame then, and none before it, so a caret that blinks twice a
   // second costs two frames a second. An earlier timed redraw that is still waiting stays; the

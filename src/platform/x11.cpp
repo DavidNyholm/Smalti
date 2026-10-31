@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <bit>
+#include <climits>
+#include <clocale>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -24,6 +26,7 @@
 
 #include "platform/file_watch.hpp"
 #include "platform/platform.hpp"
+#include "platform/text_input.hpp"
 
 namespace smalti::platform {
 
@@ -32,6 +35,8 @@ namespace {
 constexpr double kRefreshHz = 60.0;  // XRandR is not consulted yet; 60 Hz is the safe default
 constexpr float kWheelNotchPixels = 120.0f;  // one wheel notch, in logical pixels
 constexpr unsigned long kDoubleClickMs = 400;
+// Keysyms from 0x01000000 up are Unicode: 0x01000000 plus the code point.
+constexpr KeySym kUnicodeKeysym = 0x01000000;
 constexpr int kDoubleClickSlop = 4;  // pixels the pointer may move between the two clicks
 constexpr int kBitsPerPixel = 32;
 constexpr long kEventMask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
@@ -145,9 +150,12 @@ class X11Window final : public NativeWindow {
   void set_cursor(Cursor c) override;
   void capture_mouse(bool) override {}  // the X server grabs the pointer while a button is down
   void set_dark_frame(bool dark) override;
+  void set_text_input(bool active, RectI caret) override;
   float scale() const override { return scale_; }
 
   void handle(XEvent& e);
+  // The input method went away (its server stopped), and its input contexts with it.
+  void forget_input_context() { ic_ = nullptr; }
   ::Window id() const { return window_; }
   int64_t next_frame_due() const { return requested_ ? last_frame_ + kFrameNs : INT64_MAX; }
   void run_frame_if_due(int64_t now);
@@ -157,6 +165,9 @@ class X11Window final : public NativeWindow {
   void resize(int w, int h);
   void blit(int x, int y, int w, int h);
   void release();  // frees whatever exists so far; the destructor, or a failed constructor
+  void create_input_context();
+  void update_input_focus();          // the input method listens only while text input is wanted
+  std::string typed(XKeyEvent& key);  // the text a key press typed, in UTF-8
 
   X11Backend& backend_;
   WindowEvents& events_;
@@ -172,6 +183,9 @@ class X11Window final : public NativeWindow {
   Time last_press_time_ = 0;
   int last_press_x_ = 0, last_press_y_ = 0;
   std::vector<unsigned int> keys_down_;  // to tell auto-repeat from a fresh press
+  XIC ic_ = nullptr;                     // the input context; null without an input method
+  bool text_input_ = false;              // a widget that takes text has focus
+  bool focused_ = false;                 // the window has the keyboard focus
 };
 
 class X11Backend final : public PlatformBackend {
@@ -197,14 +211,23 @@ class X11Backend final : public PlatformBackend {
   void add(X11Window* w) { windows_.push_back(w); }
   void forget(X11Window* w) { std::erase(windows_, w); }
   float scale() const { return scale_; }
+  XIM input_method() const { return im_; }
+  XIMStyle input_style() const { return im_style_; }
 
  private:
   void pump_events();
+  void open_input_method();
+  static void input_method_destroyed(XIM, XPointer client, XPointer);
 
   Display* display_;
   BackendHost& host_;
   int wake_fd_ = -1;
   WatchedFile watched_;  // its descriptor joins the loop's poll
+  // XIM, which every X11 input method serves (IBus and Fcitx among them); without a running
+  // one, Xlib's own, which still makes dead keys and compose sequences type. Null if Xlib has
+  // none for the locale: keys then type their own characters, without dead keys.
+  XIM im_ = nullptr;
+  XIMStyle im_style_ = 0;
   float scale_ = 1;
   std::vector<X11Window*> windows_;
   std::vector<std::pair<unsigned int, ::Cursor>> cursors_;
@@ -236,6 +259,7 @@ X11Window::X11Window(X11Backend& backend, const WindowOptions& options, WindowEv
       XFree(hints);
     }
     gc_ = XCreateGC(display_, window_, 0, nullptr);
+    create_input_context();
     set_title(options.title);
     resize(w, h);
     backend_.add(this);  // last: the backend never sees a half-made window
@@ -258,6 +282,8 @@ void X11Window::release() {
   }
   if (gc_) XFreeGC(display_, gc_);
   gc_ = nullptr;
+  if (ic_) XDestroyIC(ic_);
+  ic_ = nullptr;
   XDestroyWindow(display_, window_);
   XFlush(display_);
 }
@@ -397,17 +423,26 @@ void X11Window::handle(XEvent& e) {
     case KeyRelease: {
       const bool down = e.type == KeyPress;
       const unsigned int code = e.xkey.keycode;
-      const auto held = std::find(keys_down_.begin(), keys_down_.end(), code);
-      const bool repeat = down && held != keys_down_.end();
-      if (down && !repeat) keys_down_.push_back(code);
-      if (!down && held != keys_down_.end()) keys_down_.erase(held);
-      const Key k = map_keysym(XLookupKeysym(&e.xkey, 0));
-      if (k != Key::unknown) events_.on_key({k, down, repeat, modifiers_of(e.xkey.state)});
+      // Keycode 0 is text an input method committed, not a key.
+      if (code != 0) {
+        const auto held = std::find(keys_down_.begin(), keys_down_.end(), code);
+        const bool repeat = down && held != keys_down_.end();
+        if (down && !repeat) keys_down_.push_back(code);
+        if (!down && held != keys_down_.end()) keys_down_.erase(held);
+        const Key k = map_keysym(XLookupKeysym(&e.xkey, 0));
+        if (k != Key::unknown) events_.on_key({k, down, repeat, modifiers_of(e.xkey.state)});
+      }
+      if (down) {
+        const std::string text = typed(e.xkey);
+        if (!text.empty()) events_.on_text(text);
+      }
       break;
     }
     case FocusIn:
     case FocusOut:
       if (e.type == FocusOut) keys_down_.clear();
+      focused_ = e.type == FocusIn;
+      update_input_focus();
       events_.on_focus(e.type == FocusIn);
       break;
     case UnmapNotify:
@@ -422,6 +457,83 @@ void X11Window::handle(XEvent& e) {
     default:
       break;
   }
+}
+
+void X11Window::create_input_context() {
+  XIM im = backend_.input_method();
+  if (!im) return;
+  const XIMStyle style = backend_.input_style();
+  if (style & XIMPreeditPosition) {
+    XPoint spot{0, 0};
+    XVaNestedList preedit = XVaCreateNestedList(0, XNSpotLocation, &spot, nullptr);
+    ic_ = XCreateIC(im, XNInputStyle, style, XNClientWindow, window_, XNFocusWindow, window_,
+                    XNPreeditAttributes, preedit, nullptr);
+    XFree(preedit);
+  } else {
+    ic_ = XCreateIC(im, XNInputStyle, style, XNClientWindow, window_, XNFocusWindow, window_,
+                    nullptr);
+  }
+  if (!ic_) return;
+  // The input method may need events the window would not otherwise ask for.
+  long wanted = 0;
+  XGetICValues(ic_, XNFilterEvents, &wanted, nullptr);
+  XSelectInput(display_, window_, kEventMask | wanted);
+  XUnsetICFocus(ic_);
+}
+
+void X11Window::update_input_focus() {
+  if (!ic_) return;
+  if (text_input_ && focused_) {
+    XSetICFocus(ic_);
+  } else {
+    XUnsetICFocus(ic_);
+  }
+}
+
+void X11Window::set_text_input(bool active, RectI caret) {
+  if (ic_ && text_input_ && !active) {
+    // Text still being composed belonged to the widget that lost focus: drop it.
+    if (char* pending = XmbResetIC(ic_)) XFree(pending);
+  }
+  text_input_ = active;
+  if (ic_ && active && (backend_.input_style() & XIMPreeditPosition)) {
+    // Over the spot: the input method draws what is being composed at the caret's baseline.
+    const auto coordinate = [](int v) {
+      return static_cast<short>(std::clamp(v, int{SHRT_MIN}, int{SHRT_MAX}));
+    };
+    XPoint spot{coordinate(caret.x), coordinate(caret.y + caret.h)};
+    XVaNestedList preedit = XVaCreateNestedList(0, XNSpotLocation, &spot, nullptr);
+    XSetICValues(ic_, XNPreeditAttributes, preedit, nullptr);
+    XFree(preedit);
+  }
+  update_input_focus();
+}
+
+std::string X11Window::typed(XKeyEvent& key) {
+  KeySym sym = NoSymbol;
+  if (ic_) {
+    constexpr int kUsual = 64;  // a key or a short word; an input method can commit more
+    std::string text(kUsual, '\0');
+    Status status = 0;
+    int n = Xutf8LookupString(ic_, &key, text.data(), kUsual, &sym, &status);
+    if (status == XBufferOverflow) {  // the same event again, with the size it asked for
+      text.resize(static_cast<size_t>(n));
+      n = Xutf8LookupString(ic_, &key, text.data(), n, &sym, &status);
+    }
+    if (status != XLookupChars && status != XLookupBoth) return {};
+    text.resize(static_cast<size_t>(std::max(n, 0)));
+    return text;
+  }
+  // No input method: the key's own character, read from its keysym (no dead keys).
+  char latin1[8];
+  XLookupString(&key, latin1, sizeof latin1, &sym, nullptr);
+  if ((sym >= 0x20 && sym <= 0x7E) || (sym >= 0xA0 && sym <= 0xFF)) {
+    return detail::utf8_of(static_cast<uint32_t>(sym));  // Latin-1 keysyms are their characters
+  }
+  if ((sym & 0xFF000000) == kUnicodeKeysym) {
+    return detail::utf8_of(static_cast<uint32_t>(sym & 0x00FFFFFF));
+  }
+  return {};
 }
 
 // --- X11Backend -----------------------------------------------------------------------------
@@ -443,12 +555,57 @@ X11Backend::X11Backend(Display* display, BackendHost& host) : display_(display),
   // Held keys repeat as presses only, not as release-press pairs, so repeats can be told apart.
   XkbSetDetectableAutoRepeat(display_, True, nullptr);
   scale_ = display_scale(display_);
+  open_input_method();
 }
 
 X11Backend::~X11Backend() {
   for (auto& [shape, c] : cursors_) XFreeCursor(display_, c);
   close(wake_fd_);
+  if (im_) XCloseIM(im_);
   XCloseDisplay(display_);
+}
+
+void X11Backend::open_input_method() {
+  // Xlib reads typed text in the C library's locale, and a program that never chose one runs
+  // in "C", where nothing beyond ASCII can be typed. Then the locale's character type is taken
+  // from the environment, as other toolkits do; a locale the program chose is left alone.
+  if (const char* current = std::setlocale(LC_CTYPE, nullptr);
+      current && std::strcmp(current, "C") == 0) {
+    std::setlocale(LC_CTYPE, "");
+  }
+  if (!XSupportsLocale()) return;
+  XSetLocaleModifiers("");  // the input method the environment names (XMODIFIERS), if any
+  im_ = XOpenIM(display_, nullptr, nullptr, nullptr);
+  if (!im_) {
+    XSetLocaleModifiers("@im=none");  // none is running: Xlib's own, for dead keys and compose
+    im_ = XOpenIM(display_, nullptr, nullptr, nullptr);
+  }
+  if (!im_) return;
+  XIMCallback destroyed{reinterpret_cast<XPointer>(this), &X11Backend::input_method_destroyed};
+  XSetIMValues(im_, XNDestroyCallback, &destroyed, nullptr);
+  // Over the spot (composing at the caret) where the input method offers it; otherwise it
+  // composes in a window of its own.
+  XIMStyles* styles = nullptr;
+  if (!XGetIMValues(im_, XNQueryInputStyle, &styles, nullptr) && styles) {
+    for (const XIMStyle wanted : {XIMStyle{XIMPreeditPosition | XIMStatusNothing},
+                                  XIMStyle{XIMPreeditNothing | XIMStatusNothing},
+                                  XIMStyle{XIMPreeditNone | XIMStatusNone}}) {
+      for (unsigned short i = 0; i < styles->count_styles && !im_style_; ++i) {
+        if (styles->supported_styles[i] == wanted) im_style_ = wanted;
+      }
+    }
+    XFree(styles);
+  }
+  if (!im_style_) {
+    XCloseIM(im_);
+    im_ = nullptr;
+  }
+}
+
+void X11Backend::input_method_destroyed(XIM, XPointer client, XPointer) {
+  auto* backend = reinterpret_cast<X11Backend*>(client);
+  backend->im_ = nullptr;
+  for (X11Window* w : backend->windows_) w->forget_input_context();
 }
 
 std::unique_ptr<NativeWindow> X11Backend::create_window(const WindowOptions& options,
@@ -484,6 +641,9 @@ void X11Backend::pump_events() {
   while (XPending(display_) > 0) {
     XEvent e;
     XNextEvent(display_, &e);
+    // The input method sees every event first, and keeps those it uses (a dead key, a key
+    // it composes with).
+    if (XFilterEvent(&e, None)) continue;
     for (X11Window* w : windows_) {
       if (w->id() == e.xany.window) {
         w->handle(e);

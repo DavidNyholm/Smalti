@@ -29,6 +29,9 @@ class WindowEvents {
   virtual void on_mouse_wheel(Point device, Point delta_logical, Modifiers mods) = 0;
   virtual void on_mouse_leave() = 0;
   virtual void on_key(const KeyEvent& e) = 0;
+  // Text the user typed, in UTF-8, after the key events that typed it. The core drops control
+  // characters and invalid UTF-8, so a backend may pass on what the system gives it.
+  virtual void on_text(std::string_view utf8) = 0;
   virtual void on_focus(bool gained) = 0;
   // The system took the mouse capture away (another window grabbed it): the press is over.
   virtual void on_capture_lost() = 0;
@@ -57,6 +60,10 @@ class NativeWindow {
   virtual void set_cursor(Cursor cursor) = 0;
   virtual void capture_mouse(bool capture) = 0;
   virtual void set_dark_frame(bool dark) = 0;
+  // Switches the input method (an IME) on while a widget that takes text has focus, and off
+  // otherwise; while on, its windows go at `caret` (device pixels). Called again when the caret
+  // moves. Switching off may discard text still being composed.
+  virtual void set_text_input(bool active, RectI caret) = 0;
   virtual float scale() const = 0;
   virtual size_t gpu_bytes() const { return 0; }
 };

@@ -154,6 +154,11 @@ void Widget::arrange(Rect bounds) {
 void Widget::paint(Painter&) {}
 bool Widget::on_mouse(const MouseEvent&) { return false; }
 bool Widget::on_key(const KeyEvent&) { return false; }
+bool Widget::on_text(std::string_view) { return false; }
+Rect Widget::text_caret() const {
+  const Rect b = bounds();
+  return {b.x, b.y, 1, b.height};
+}
 void Widget::on_focus_changed(bool) { invalidate(); }
 void Widget::on_hover_changed(bool) {}
 
@@ -197,6 +202,10 @@ void Widget::animate(Motion& m, float target, std::chrono::milliseconds duration
       instant ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
   if (ws && m.duration_ns > 0) ws->animate_until(id_, m.start_ns + m.duration_ns);
   invalidate();
+}
+
+void Widget::text_caret_moved() {
+  if (auto* ws = detail::window_state_of(*this); ws && ws->focused == id_) ws->sync_text_input();
 }
 
 void Widget::keep_animating() {

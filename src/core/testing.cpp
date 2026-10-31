@@ -85,6 +85,12 @@ void Driver::key(Key k, Modifiers modifiers) {
   rethrow_failure();
 }
 
+void Driver::type(std::string_view utf8) {
+  native(window_).events().on_text(utf8);
+  backend().host().after_events();
+  rethrow_failure();
+}
+
 void Driver::resize(Size logical, float scale) {
   native(window_).resize(logical, scale);
   backend().host().after_events();
@@ -122,6 +128,15 @@ uint32_t Driver::pixel(int x, int y) const {
 }
 
 bool Driver::frame_requested() const { return native(window_).frame_requested(); }
+
+bool Driver::text_input_active() const { return native(window_).text_input(); }
+
+Rect Driver::text_input_caret() const {
+  const detail::RectI c = native(window_).text_caret();
+  const float s = native(window_).scale();
+  return {static_cast<float>(c.x) / s, static_cast<float>(c.y) / s, static_cast<float>(c.w) / s,
+          static_cast<float>(c.h) / s};
+}
 
 int Driver::frames_drawn() const { return window_->state().frames_drawn; }
 

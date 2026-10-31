@@ -67,6 +67,9 @@ struct WindowState final : platform::WindowEvents {
   int64_t now() const;
   void focus(Widget* w);
   void request_frame();
+  // Switches the input method on or off and places it, as the focused widget needs; tells the
+  // platform only when that changes.
+  void sync_text_input();
   // Ends the mouse press without a release: the pressed widget gets MouseEvent::Kind::cancel.
   void cancel_press();
   // Drops focus, the press and the hover from `root` and its descendants, as they are being
@@ -80,6 +83,7 @@ struct WindowState final : platform::WindowEvents {
   void on_mouse_wheel(Point device, Point delta, Modifiers mods) override;
   void on_mouse_leave() override;
   void on_key(const KeyEvent& e) override;
+  void on_text(std::string_view utf8) override;
   void on_focus(bool gained) override;
   void on_capture_lost() override;
   void on_resize(int width_px, int height_px, float scale) override;
@@ -120,6 +124,8 @@ struct WindowState final : platform::WindowEvents {
   Point last_mouse{-1, -1};
   std::vector<std::pair<WidgetId, int64_t>> animating;  // widget, until when
   std::vector<std::pair<WidgetId, int64_t>> timed;      // widget, when to redraw it
+  bool text_input_active = false;                       // as last told to the platform
+  RectI text_input_caret{};
 };
 
 struct AppState final : platform::BackendHost {
