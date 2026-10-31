@@ -27,6 +27,7 @@ smalti_embed_files("${smalti_generated}/builtin_themes.cpp"
 
 add_library(smalti STATIC
   src/core/app.cpp
+  src/core/grid_columns.cpp
   src/core/layout.cpp
   src/core/painter.cpp
   src/core/registry.cpp
@@ -149,6 +150,7 @@ if(SMALTI_BUILD_TESTS)
   add_executable(smalti_tests
     tests/main.cpp
     tests/test_font.cpp
+    tests/test_grid_columns.cpp
     tests/test_jsonc.cpp
     tests/test_layout.cpp
     tests/test_memory.cpp

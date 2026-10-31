@@ -137,3 +137,44 @@ TEST(review5_a_widget_that_hides_on_hover_leaves_the_arrow) {
   d.move(w->bounds().center());
   CHECK(d.cursor() == Cursor::arrow);  // the hand belonged to a widget that is gone
 }
+
+// Findings 6 and 7, fixed in 0.2 by solving the spans together.
+TEST(review5_overlapping_spans_over_fit_columns_fit_within_the_grid) {
+  // Grown one span at a time, the fit columns took 50, 75 and 25 and pushed the field out.
+  App app(headless());
+  auto win = app.open_window({"t", {120, 100}});
+  auto grid = win->add<Grid>(GridOptions{
+      .columns = {GridTrack::fit(), GridTrack::fit(), GridTrack::fit(), GridTrack::stretch()},
+      .column_spacing = 0});
+  auto first = grid->add<Box>(Size{100, 10});
+  first->set_column_span(2);
+  grid->add<Box>(Size{0, 10});
+  grid->add<Box>(Size{0, 10});
+  grid->add<Box>(Size{0, 10});
+  auto second = grid->add<Box>(Size{100, 10});
+  second->set_column_span(2);
+  auto field = grid->add<Box>(Size{0, 10});
+  testing::Driver(win).frame();
+  CHECK(first->bounds().width >= 99.5f);
+  CHECK(second->bounds().width >= 99.5f);
+  CHECK(field->bounds().right() <= 120.5f);  // 0, 100 and 0 leave the field 20
+}
+
+TEST(review5_a_span_over_the_stretch_column_is_not_left_short) {
+  // Grown evenly, the first span's columns took 25 each, and the second span, over the stretch
+  // column and the second of them, got 25 + 150 of its 180.
+  App app(headless());
+  auto win = app.open_window({"t", {200, 100}});
+  auto grid = win->add<Grid>(GridOptions{
+      .columns = {GridTrack::fit(), GridTrack::fit(), GridTrack::stretch()}, .column_spacing = 0});
+  auto first = grid->add<Box>(Size{50, 10});
+  first->set_column_span(2);
+  grid->add<Box>(Size{0, 10});
+  grid->add<Box>(Size{0, 10});
+  auto second = grid->add<Box>(Size{180, 10});
+  second->set_column_span(2);
+  testing::Driver(win).frame();
+  CHECK(first->bounds().width >= 49.5f);
+  CHECK(second->bounds().width >= 179.5f);
+  CHECK(second->bounds().right() <= 200.5f);
+}

@@ -153,14 +153,9 @@ MUTATIONS = [
         [("      within_raster_limit(outline_, t)\n", "      true\n")],
     ),
     (
-        "core/layout.cpp",
-        "a span over stretch columns ignores what sharing takes back",
-        [
-            (
-                "      const float kept = share ? 1.0f - span_weight / weight_total : 1.0f;",
-                "      const float kept = 1.0f;",
-            )
-        ],
+        "core/grid_columns.cpp",
+        "grid spans: growth ignores what it takes from the stretch columns",
+        [("    Linear have{d.share * left, -d.share};", "    Linear have{d.share * left, 0};")],
     ),
     (
         "core/window.cpp",
@@ -217,9 +212,9 @@ MUTATIONS = [
         [("  if (hovered != id) return;\n", "")],
     ),
     (
-        "core/layout.cpp",
-        "spanning children are measured against stale column widths",
-        [("      result = shared_out();  // the next span sees what this one took\n", "")],
+        "core/grid_columns.cpp",
+        "grid spans: each span sees the columns before earlier spans grew them",
+        [("      have.at += x[g].at;", "      have.at += least[g];")],
     ),
     (
         "core/testing.cpp",
@@ -329,17 +324,12 @@ MUTATIONS = [
     (
         "core/layout.cpp",
         "grid fit columns ignore their cells",
-        [
-            (
-                "      widths[c] = std::max(widths[c], s.width);",
-                "      (void)s;",
-            )
-        ],
+        [("      rules[first].value = std::max(rules[first].value, need);", "      (void)need;")],
     ),
     (
         "core/layout.cpp",
         "a spanning grid child does not widen its columns",
-        [("      if (content_sized(c)) widths[c] += extra;", "      (void)extra;")],
+        [("  return detail::solve_columns(rules, spans,", "  return detail::solve_columns(rules, {},")],
     ),
     (
         "core/layout.cpp",
@@ -984,6 +974,21 @@ MUTATIONS = [
         "widgets/text_box.cpp",
         "text box: a typing pause does not end the undo step",
         [("  if (now_ns() - last_edit_ns_ >= kTypingPauseNs) edit_->break_step();", "")],
+    ),
+    (
+        "core/grid_columns.cpp",
+        "grid spans: growth is spread over the whole span, not where later spans need it",
+        [("        d.from = g;\n", "")],
+    ),
+    (
+        "core/grid_columns.cpp",
+        "grid spans: with no split that fits, spans over every stretch column still grow",
+        [("    std::erase_if(demands, [](const Demand& d) { return d.share >= kWholeShare; });\n", "")],
+    ),
+    (
+        "core/grid_columns.cpp",
+        "grid spans: a span counts nothing from the fixed columns it covers",
+        [("      if (columns[c].kind == ColumnRule::Kind::fixed) need -= columns[c].value;\n", "")],
     ),
 ]
 

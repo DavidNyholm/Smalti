@@ -6,7 +6,7 @@ What comes after v0.1, in order. Each version is tagged on `main` only after the
 - `TextBox`: caret, selection, word jumps, clipboard, undo, password mode, input-method placement.
 - Clipboard on both platforms.
 - Themes as data files (JSON with comments) with live reload: edit a theme and the running app restyles itself. Precise errors that never half-apply a theme, and a page describing the format for people and for agents. **In `beta`:** the format, the loader, widget styles, live reload, `smalti-theme check` and the [Themes](Themes.md) page; timed redraws for the caret to come; typed text and the input method; the clipboard; `TextBox`.
-- Grid spans solved together, so spans that overlap across fit columns always get a split that fits when one exists.
+- Grid spans solved together, so spans that overlap across fit columns always get a split that fits when one exists. **In `beta`.**
 
 **v0.3 "Content": scrolling, lists, images.**
 - `ScrollArea` with overlay scrollbars and smooth touchpad scrolling; scrolling by compositor offset, not by redrawing.

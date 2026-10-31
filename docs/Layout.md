@@ -25,7 +25,7 @@ Empty space with stretch 1 by default: `row->add<Spacer>()` between two buttons 
 - `GridTrack::fit()`: as wide as its widest cell.
 - `GridTrack::stretch(weight)`: a share of what is left.
 
-`set_column_span(2)` makes a child cover two columns. A spanning child wider than its columns widens the fit columns among them; where it also covers stretch columns, they keep their share and the fit columns make up the rest. A span over every stretch column gets what sharing gives it. Within a row, cells are centred vertically unless their alignment says otherwise.
+`set_column_span(2)` makes a child cover two columns. A spanning child wider than its columns widens the fit columns among them; where it also covers stretch columns, they keep their share and the fit columns make up the rest. The spans are solved together: whenever some split lets every spanning child fit within the grid's width, the grid uses the one that leaves the most to the stretch columns. A lone span's growth is split evenly over its fit columns; spans that overlap put more of it in the fit columns they share, where it counts for both. When no split fits, the fit columns still give each span what it needs, and the grid is wider than its space, except that a span over every stretch column gets what sharing gives it: widening a fit column would only narrow the stretch columns by as much. Within a row, cells are centred vertically unless their alignment says otherwise.
 
 ## Card
 
