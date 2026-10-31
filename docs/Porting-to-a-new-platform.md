@@ -14,11 +14,12 @@ A platform is two classes in `src/platform/platform.hpp`: `PlatformBackend` (the
 | `set_cursor` | arrow, hand, text, resize | `SetCursor` | `XDefineCursor` | `NSCursor set` |
 | `capture_mouse` | keep mouse events while a button is down | `SetCapture` | implicit grab | automatic |
 | `set_dark_frame` | dark title bar, where supported | DWM attribute 20 | `_GTK_THEME_VARIANT` | `NSAppearance` |
+| `set_text_input` | switch the input method on or off, and place its windows at the caret | `ImmAssociateContextEx`, `ImmSetCandidateWindow` | `XSetICFocus`, `XNSpotLocation` | `NSTextInputClient` |
 | `scale` | device pixels per logical pixel | `GetDpiForWindow / 96` | `Xft.dpi / 96` | `backingScaleFactor` |
 
 ## WindowEvents (the backend calls these)
 
-`on_mouse_move`, `on_mouse_button`, `on_mouse_wheel` and `on_mouse_leave` take device pixels; `on_key` takes a `KeyEvent`; `on_focus`, `on_capture_lost` (the system took the mouse capture away; harmless to report after your own release too), `on_resize(width, height, scale)` (also after the frame buffer is replaced), `on_frame(time)` and `on_close_request`.
+`on_mouse_move`, `on_mouse_button`, `on_mouse_wheel` and `on_mouse_leave` take device pixels; `on_key` takes a `KeyEvent`; `on_text` takes the UTF-8 text typed, after the key events that typed it (the core drops control characters and invalid UTF-8, so pass on what the system gives); `on_focus`, `on_capture_lost` (the system took the mouse capture away; harmless to report after your own release too), `on_resize(width, height, scale)` (also after the frame buffer is replaced), `on_frame(time)` and `on_close_request`.
 
 **Rules a backend must keep:**
 - `create_window` reports the initial size through `on_resize` before it returns.

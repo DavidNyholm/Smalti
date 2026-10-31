@@ -34,6 +34,16 @@ A press goes to the widget under the pointer and stays with it until that button
 
 A widget that is hidden or disabled, or sits inside a container that is, loses keyboard focus, and keys never reach it.
 
+## Typed text and the input method
+
+Text the user types reaches the focused widget through `on_text(utf8)`, separately from keys: a key may type nothing (Shift, the arrows), and one character may take several keys, through a dead key (´ then e for é), a compose sequence, or an input method such as the Japanese or Chinese IMEs, which may commit a whole word at once. The text comes after the key events that typed it. It never holds control characters: Tab, Enter, Backspace, Escape and Ctrl combinations arrive only as keys, and invalid UTF-8 is dropped before a widget sees it.
+
+A widget that takes text says so with `accepts_text()`, and gives the position of its caret with `text_caret()` (calling `text_caret_moved()` when it moves). While such a widget has focus, the window's input method is switched on and its windows (the text being composed, the list of candidates) are placed at the caret; while anything else has focus it is off, so an IME never opens over a button. Text still being composed when the focus moves away is discarded rather than given to the next widget.
+
+- **Windows:** `WM_CHAR`, with the two halves of characters outside the Basic Multilingual Plane (most emoji) joined. The input context is attached only for a widget that takes text, and the IME's windows are placed with `ImmSetCompositionWindow` and `ImmSetCandidateWindow`, the candidates kept clear of the caret.
+- **Linux:** XIM, which every X11 input method serves (IBus and Fcitx among them, through `XMODIFIERS`). Without a running one, Xlib's own input method is used, so dead keys and compose sequences still type. Where the input method offers it, what is being composed appears at the caret (over the spot); otherwise it composes in a window of its own. Xlib reads typed text in the C library's locale, so if the program left `LC_CTYPE` as "C", smalti takes it from the environment (`LANG`), as other toolkits do; a locale the program chose is left alone.
+- Showing the text being composed inside the widget itself (inline composition) is planned after v0.5.
+
 ## Frames and motion
 
 Widgets mark what changed (`invalidate()`); the window redraws only those rectangles at its next frame, in step with the display. Animations are values on the frame clock (`animate(motion, target, duration)`, read with `at(motion)`), so they cost nothing between animations and show the right value at any frame rate. With the system's animation setting turned off, they jump straight to the end.

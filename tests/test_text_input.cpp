@@ -96,7 +96,7 @@ TEST(text_input_reaches_the_focused_widget_only) {
   CHECK_EQ(first->typed, std::string("h\u00e9j"));
   CHECK_EQ(first->calls, 1);
   CHECK_EQ(second->typed, std::string("!"));
-  // A focused widget that is disabled gets nothing.
+  // Disabling the focused widget takes the focus away with it: nothing is delivered to it.
   second->set_enabled(false);
   d.type("x");
   CHECK_EQ(second->typed, std::string("!"));

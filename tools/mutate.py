@@ -795,6 +795,36 @@ MUTATIONS = [
         "stopping the theme watch leaves the folder watched",
         [("  backend->stop_watching_file();\n", "")],
     ),
+    (
+        "platform/text_input.cpp",
+        "typed text keeps control characters",
+        [
+            (
+                "bool is_control(uint32_t cp) { return cp < 0x20 || (cp >= 0x7F && cp <= 0x9F); }",
+                "bool is_control(uint32_t) { return false; }",
+            )
+        ],
+    ),
+    (
+        "platform/text_input.cpp",
+        "typed text drops both halves of a surrogate pair",
+        [("    if (high_ != 0) {", "    if (false) {")],
+    ),
+    (
+        "core/window.cpp",
+        "typed text: the IME opens for any focused widget",
+        [
+            (
+                "  const bool active = f && eligible(*f) && f->accepts_text();",
+                "  const bool active = f && eligible(*f);",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "typed text: the IME stays where the caret was before a new layout",
+        [("  sync_text_input();  // a new layout can move the caret without the widget saying so\n", "")],
+    ),
 ]
 
 BUILD_TIMEOUT_S = 900  # a mutant must not hang the whole run on a broken build

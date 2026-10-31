@@ -12,6 +12,8 @@ Theme files, the first part of 0.2: a theme is a file in JSON with comments, rea
 - Changed: a secondary button's outline is no longer tinted under the pointer or while pressed; the tint and the press shade are now part of the button's fill.
 - New: timed redraws. `Widget::redraw_at(time)` and `redraw_after(delay)` draw a widget once at a later time, with the loop asleep until then; the porting interface's `BackendHost` gains `next_deadline_ns()` and `run_timers()` for it.
 - New: live reload. `App::watch_theme(file)` applies a theme file and reapplies it 50 ms after each save, through the system's change notifications; `on_theme_error` receives a broken save's errors while the last good theme stays. The porting interface's `PlatformBackend` gains `watch_file` and `stop_watching_file`.
+- New: typed text. `Widget::on_text(utf8)` receives what the user types, apart from keys, so dead keys, compose sequences and input methods (IMEs) work; a widget whose `accepts_text()` is true gets the window's input method, placed at its `text_caret()`, while it has focus. The porting interface gains `WindowEvents::on_text` and `NativeWindow::set_text_input`.
+- Changed (Linux): if the program left `LC_CTYPE` as "C", smalti sets it from the environment, which XIM needs to type anything beyond ASCII.
 - New: `smalti-theme check <file>`, a command-line checker built from the same loader (option `SMALTI_BUILD_TOOLS`).
 - New: `gallery <file.jsonc>` opens the gallery in a theme file's theme and restyles it on every save.
 - Changed: the built-in themes are now the files `themes/dark.jsonc`, `black.jsonc` and `light.jsonc`, compiled into the library. They give exactly the 0.1 values, field for field, and the gallery draws the same pixels.

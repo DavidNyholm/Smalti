@@ -4,7 +4,7 @@ There is no continuous integration yet. Every check on this page runs locally, w
 
 ## The tests
 
-`smalti_tests` holds 146 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
+`smalti_tests` holds 151 tests and runs in a few seconds. It needs no test framework, and no screen: most tests drive real widgets through the headless backend, with simulated mouse and keyboard input, a fake clock that advances one frame at a time, and the drawn pixels read back.
 
 - **Rendering:** the rasterizer's coverage is exact (rectangles with fractional edges, a circle's area, holes from opposite winding, clipping), soft shadows' fast path matches the direct integral to within one step in 255, dithered gradients average to the true ramp.
 - **Fonts and text:** Inter's metrics and kerning. Truncated and randomly damaged copies of the font (about 300) must either be refused cleanly or still work. Fonts built byte by byte in `tests/font_builder.hpp` stand in for hostile ones: a composite glyph that multiplies itself, a character map that lies about its size, kerning split across lookups, a 'kern' feature repeated a thousand times, a glyph thousands of pixels wide. Invalid UTF-8 (cut short, interrupted, overlong, surrogates, past U+10FFFF) decodes to the replacement character.
@@ -14,6 +14,7 @@ There is no continuous integration yet. Every check on this page runs locally, w
 - **Memory:** an `operator new` counter, which counts calls and bytes, shows that an animated frame allocates nothing once warm and that hostile fonts cannot make the reader allocate much. It replaces every form of `operator new` that its `delete` frees, the nothrow one included: under AddressSanitizer a form left out comes from the sanitizer, which reports our `free()` of its memory as a mismatch.
 - **Review regressions:** `tests/test_review.cpp` (round 1: one test for each of the 17 defects that can be reproduced without a screen, and three for related cases) `tests/test_review2.cpp` (round 2: 16 tests) and `tests/test_review3.cpp` (round 3: 7 tests) `tests/test_review4.cpp` (round 4: 12 tests) `tests/test_review5.cpp` (round 5: 5 tests) and `tests/test_review6.cpp` (round 6: 10 tests). See below.
 - **Timed redraws and live reload** (in `beta`): a timed redraw costs one frame each time on the fake clock (`tests/test_timing.cpp`); live reload runs against real files and the system's own change reports, which the headless backend reads without blocking (`tests/test_reload.cpp`): the pause after a save, a broken save keeping the last good theme, an editor saving by renaming a new file over the old, a burst of saves reloading once, other files ignored. Those seven ran 20 times on Windows and 20 times on Linux, also under the sanitizers, without a failure.
+- **Typed text** (in `beta`): cleaning (controls and invalid UTF-8 dropped), joining Windows' UTF-16 halves, delivery to the focused widget only, and the input method switched on only while a widget that takes text has focus, following its caret through layout and scale (`tests/test_text_input.cpp`). Through the real backends, with probe programs: on Windows, characters posted to the window (an emoji in two halves, a Ctrl+A that must be dropped) arrived as `hé😀j`, and IMM32 reported the IME detached for a button and attached, with its candidates kept clear of the caret, for the text widget; on Xvfb, `xdotool` typed `héj😀` exactly, and a dead acute followed by e composed to é through Xlib's own input method.
 
 ```bash
 cmake --preset windows
@@ -41,7 +42,7 @@ cmake --build --preset linux-asan
 
 A test suite that passes proves little until it is seen to fail. `tools/mutate.py` puts one deliberate bug at a time into the sources, rebuilds and runs the suite, and reports whether any test failed. The bugs are the plausible ones: a stale `Ref` resolving to whatever reuses its slot, removed widgets never destroyed, damage never recorded, Shift+Tab moving forwards, the glyph cache never evicting, a shadow tile read one pixel off, kerning stopping after the first lookup, and so on, plus thirty-four that each undo one of the review fixes below, twenty-two in the theme file reader, the loader and the widget styles, twelve that undo round 6's fixes, and six in timed redraws and live reload.
 
-Result on the current sources, MSVC Debug: **106 of 106 caught**, by a failing test or a crashing test binary, none by a time-out.
+Result on the current sources, MSVC Debug: **106 of 106 caught**, by a failing test or a crashing test binary, none by a time-out, on the last full run; the four added since for typed text, run on their own, are all caught.
 
 Getting there took some fixing of the tests themselves. The first run after round 1 caught 37 of 42, and every miss involved an older test or an injected bug, not a review fix:
 
