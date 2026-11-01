@@ -10,7 +10,7 @@ Every built-in control, what it does, and how it works from the keyboard. All of
 | `Switch` | `add<Switch>("text", on)` | `on_change(bool)` | Space or Enter |
 | `RadioButton` | `add<RadioButton>("text", selected)` | `on_select()` | Space; arrows move within the group |
 | `Slider` | `add<Slider>(SliderOptions{.min, .max, .value, .step})` | `on_change(float)` | arrows, Page Up and Down, Home, End |
-| `TextBox` (in `beta`) | `add<TextBox>(TextBoxOptions{.text, .placeholder, .password, .max_length})`, or `add<TextBox>("placeholder")` | `on_change(const std::string&)`, `on_submit(const std::string&)` | typing, and the keys below |
+| `TextBox` | `add<TextBox>(TextBoxOptions{.text, .placeholder, .password, .max_length})`, or `add<TextBox>("placeholder")` | `on_change(const std::string&)`, `on_submit(const std::string&)` | typing, and the keys below |
 | `ProgressBar` | `add<ProgressBar>(0.4f)` | none | not focusable |
 | `Separator` | `add<Separator>()` | none | not focusable |
 | `Card` | `add<Card>()` | none | a container |
@@ -25,7 +25,7 @@ Every built-in control, what it does, and how it works from the keyboard. All of
 
 **Progress bars** animate to a new value. `set_indeterminate(true)` shows a moving segment for work of unknown length; it draws only while visible.
 
-**Text boxes** (in `beta`, for v0.2) hold one line of text. Typing goes through the system's input method, so dead keys, compose sequences and IMEs work, with the IME's windows at the caret ([Events and threading](Events-and-threading.md#typed-text-and-the-input-method)).
+**Text boxes** hold one line of text. Typing goes through the system's input method, so dead keys, compose sequences and IMEs work, with the IME's windows at the caret ([Events and threading](Events-and-threading.md#typed-text-and-the-input-method)).
 
 - **Keys:** the arrows move by character, and with Ctrl by word; Home and End go to either end; Shift with any of them selects. Backspace and Delete erase a character, or with Ctrl a word. Ctrl+A selects everything. Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste, as do Ctrl+Insert, Shift+Delete and Shift+Insert. Ctrl+Z undoes; Ctrl+Y and Ctrl+Shift+Z redo. Enter calls `on_submit` when one is set, and otherwise goes on to the window, as Escape and Tab always do.
 - **Mouse:** a click places the caret, a drag selects (and scrolls when it passes either end), a double click selects a word, a triple click everything, and Shift+click extends the selection.

@@ -2,11 +2,11 @@
 
 What comes after v0.1, in order. Each version is tagged on `main` only after the full suite, the sanitizers, the injected bugs and a review round pass.
 
-**v0.2 "Words": text input and themes as files.**
+**v0.2 "Words": text input and themes as files.** Released as 0.2.0 on 2026-11-01.
 - `TextBox`: caret, selection, word jumps, clipboard, undo, password mode, input-method placement.
 - Clipboard on both platforms.
-- Themes as data files (JSON with comments) with live reload: edit a theme and the running app restyles itself. Precise errors that never half-apply a theme, and a page describing the format for people and for agents. **In `beta`:** the format, the loader, widget styles, live reload, `smalti-theme check` and the [Themes](Themes.md) page; timed redraws for the caret to come; typed text and the input method; the clipboard; `TextBox`.
-- Grid spans solved together, so spans that overlap across fit columns always get a split that fits when one exists. **In `beta`.**
+- Themes as data files (JSON with comments) with live reload: edit a theme and the running app restyles itself. Precise errors that never half-apply a theme, and a page describing the format for people and for agents.
+- Grid spans solved together, so spans that overlap across fit columns always get a split that fits when one exists.
 
 **v0.3 "Content": scrolling, lists, images.**
 - `ScrollArea` with overlay scrollbars and smooth touchpad scrolling; scrolling by compositor offset, not by redrawing.

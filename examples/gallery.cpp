@@ -1,4 +1,4 @@
-// The gallery: every v0.1 control in one window. The interface itself is in gallery_ui.hpp,
+// The gallery: every built-in control in one window. The interface itself is in gallery_ui.hpp,
 // shared with the screenshot renderer.
 //
 //   gallery [theme.jsonc]    opens in that theme, and restyles itself each time it is saved

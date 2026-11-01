@@ -1,4 +1,4 @@
-// The built-in controls of v0.1. Each one follows the theme, animates its state changes, and
+// The built-in controls. Each one follows the theme, animates its state changes, and
 // works by keyboard as well as by mouse.
 #pragma once
 

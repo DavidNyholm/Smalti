@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(smalti
-  VERSION 0.1.2
+  VERSION 0.2.0
   DESCRIPTION "A C++20 GUI library for desktop applications"
   LANGUAGES CXX)
 

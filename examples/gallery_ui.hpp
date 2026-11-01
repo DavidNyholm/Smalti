@@ -1,5 +1,5 @@
 // The gallery's user interface, shared by the gallery program and the screenshot renderer:
-// every v0.1 control, the three built-in themes, and a custom widget (the sidebar).
+// every built-in control, the three built-in themes, and a custom widget (the sidebar).
 #pragma once
 
 #include <cmath>
@@ -43,7 +43,7 @@ struct FileTheme {
 
 inline void build_sidebar(sm::App& app, sm::Ref<Sidebar> side, const FileTheme* file) {
   side->add<sm::Label>("smalti", sm::LabelOptions{.role = sm::TextRole::title});
-  side->add<sm::Label>("Gallery, v0.1", sm::LabelOptions{.role = sm::TextRole::caption});
+  side->add<sm::Label>("Gallery, v0.2", sm::LabelOptions{.role = sm::TextRole::caption});
   side->add<sm::Spacer>(0.0f, 16.0f);
   for (const char* item : {"Controls", "Layout", "Motion", "Themes"}) {
     side->add<sm::Button>(item, sm::ButtonVariant::ghost)->set_align(sm::Align::stretch);
@@ -140,7 +140,7 @@ inline void build_content(sm::App& app, sm::Ref<sm::Column> content) {
     col->add<sm::Button>("Close", sm::ButtonVariant::primary)->on_click([w] { w->close(); });
   });
   actions->add<sm::Spacer>();
-  actions->add<sm::Label>("smalti v0.1", sm::LabelOptions{.role = sm::TextRole::caption});
+  actions->add<sm::Label>("smalti v0.2", sm::LabelOptions{.role = sm::TextRole::caption});
 }
 
 }  // namespace gallery

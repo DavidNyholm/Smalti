@@ -4,7 +4,7 @@ A C++20 GUI library for desktop applications that look like current apps without
 
 *Smalti* are the glass tiles of Byzantine mosaics, each set at a slight angle so the wall catches the light.
 
-**Status:** 0.1.2 is the latest release: 0.1.0 "First light" (the look, motion and basic controls) with the fixes of later review rounds. It is verified locally on Windows 11 (MSVC 2022 17.14) and Ubuntu 24.04 under WSL (GCC 14). The API will change during 0.x. Text input arrives in v0.2. Screen readers are not supported before v0.5, so smalti cannot yet be recommended for software that must be accessible. The [wiki](https://github.com/DavidNyholm/Smalti/wiki) (also in [`docs/`](docs/Home.md)) has everything beyond this page.
+**Status:** 0.2.0 "Words" is the latest release: text input, the clipboard, and themes as files with live reload, on top of 0.1 "First light" (the look, motion and basic controls). It is verified locally on Windows 11 (MSVC 2022 17.14) and Ubuntu 24.04 under WSL (GCC 14). The API will change during 0.x. Text is drawn with the built-in Inter, which covers Latin, Greek and Cyrillic; other scripts and emoji are typed and kept but drawn as boxes until fallback fonts come. Screen readers are not supported before v0.5, so smalti cannot yet be recommended for software that must be accessible. The [wiki](https://github.com/DavidNyholm/Smalti/wiki) (also in [`docs/`](docs/Home.md)) has everything beyond this page.
 
 ## Quick start
 
@@ -51,12 +51,12 @@ Every widget is reached through a `Ref<T>`: a checked handle you can copy into a
 
 ## What it does
 
-- **A modern look by default:** layered surfaces, hairline borders, soft shadows computed in closed form, and Inter embedded as the default font. Three built-in themes: Dark, Light, and Black for OLED screens (true black, with depth from borders because shadows cannot be seen on black). In `beta`, a theme is also a file you can write and check yourself: [Themes](docs/Themes.md).
+- **A modern look by default:** layered surfaces, hairline borders, soft shadows computed in closed form, and Inter embedded as the default font. Three built-in themes: Dark, Light, and Black for OLED screens (true black, with depth from borders because shadows cannot be seen on black). A theme is also a file you can write and check yourself, and a running app restyles itself when it is saved: [Themes](docs/Themes.md).
 - **Motion everywhere:** hover, press, focus and value changes animate. Each animation is a function of the frame clock, so it costs nothing between animations and is exactly where it should be at any frame rate.
 - **Smooth and light:** widgets are drawn on the CPU and composited on the GPU (Direct3D 11 on Windows), presented in step with the display. Only what changed is redrawn, and an idle window uses no CPU. The first frame never waits for the GPU driver.
 - **Safe to hold:** `Ref<T>` handles, deferred removal (a callback may remove its own widget or close its own window), one UI thread enforced on every call (except `App::post`, the one call made for other threads), exceptions from callbacks rethrown from `run()` rather than through the OS.
 - **Keyboard first-class:** Tab order, a focus ring shown only to keyboard users, Space and Enter, arrows in sliders and radio groups.
-- **v0.1 widgets:** Label, Button (primary, secondary, ghost, danger), CheckBox, Switch, RadioButton, Slider, ProgressBar (with an indeterminate mode), Separator, Card; layout with Column, Row, Grid and Spacer. In `beta`, for v0.2: TextBox, typed text through the system's input method, and the clipboard.
+- **Widgets:** Label, Button (primary, secondary, ghost, danger), CheckBox, Switch, RadioButton, Slider, ProgressBar (with an indeterminate mode), Separator, Card, and TextBox (one line, typed through the system's input method, with the clipboard and undo); layout with Column, Row, Grid and Spacer.
 - **No dependencies:** the operating system and its SDK, the compiler, CMake. Nothing is downloaded at build time. Direct3D and the other Windows DLLs outside the protected KnownDLLs list are loaded from the system directory only. See [Dependencies and supply chain](docs/Dependencies-and-supply-chain.md).
 
 ## Read more

@@ -2,8 +2,6 @@
 
 A theme is a text file in JSON with comments. It sets the colours, sizes, fonts and motion that every built-in widget draws with. The three built-in themes are such files ([`themes/dark.jsonc`](../themes/dark.jsonc), `black.jsonc` and `light.jsonc`), compiled into the library. This page describes the whole format, so a person or a language model can write a valid theme from it alone.
 
-> **In `beta`, for 0.2.** Theme files, widget styles and live reload: a theme can be read, checked, applied, and changed while the app runs.
-
 ## A theme in a minute
 
 ```jsonc
@@ -148,7 +146,7 @@ Every built-in widget draws a look made from the tokens. The `widgets` section c
 | `Separator` | | `fill` | | |
 | `Label` | `body`, `secondary`, `caption`, `title`, `heading` | `text` | | disabled |
 | `Card` | | `fill`, `border` | yes | |
-| `TextBox` (in `beta`) | | `fill`, `border`, `text`, `placeholder`, `selection` (behind selected text), `caret` | yes | hover, focused, disabled |
+| `TextBox` | | `fill`, `border`, `text`, `placeholder`, `selection` (behind selected text), `caret` | yes | hover, focused, disabled |
 
 `focus` is the colour of the focus ring. The built-in look, which a style changes:
 
