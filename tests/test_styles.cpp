@@ -313,3 +313,20 @@ TEST(styles_blend_through_premultiplied_colour) {
   CHECK(near(detail::over({1, 1, 1, 1}, {0, 0, 0, 0.5f}), {0.5f, 0.5f, 0.5f, 1}));
   CHECK(detail::over({0, 0, 0, 0}, {0, 0, 0, 0}).a == 0);
 }
+
+TEST(styles_text_box_selection_keeps_the_accents_opacity) {
+  // "accent 35%" multiplies the accent's own opacity: a see-through accent selects see-through.
+  const ThemeLoad r = parse_theme(R"({"tokens": {"accent": "#ff000080"}})");
+  CHECK(r.ok());
+  const detail::WidgetStyles styles = detail::compute_widget_styles(r.theme);
+  const Color selection =
+      styles.get(StyledWidget::text_box).color(detail::TextBoxSlot::selection, {});
+  CHECK(near(selection, r.theme.accent.with_alpha(r.theme.accent.a * 0.35f)));
+  const ThemeLoad clear = parse_theme(R"({"tokens": {"accent": "#ff000000"}})");
+  CHECK(clear.ok());
+  CHECK_EQ(detail::compute_widget_styles(clear.theme)
+               .get(StyledWidget::text_box)
+               .color(detail::TextBoxSlot::selection, {})
+               .a,
+           0.0f);
+}

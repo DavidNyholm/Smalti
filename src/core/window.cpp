@@ -176,6 +176,7 @@ void WindowState::animate_until(WidgetId id, int64_t end_ns) {
 }
 
 void WindowState::redraw_at(WidgetId id, int64_t time_ns) {
+  if (time_ns == INT64_MAX) return;  // never: nothing to wait for
   for (auto& [wid, when] : timed) {
     if (wid == id) {
       when = std::min(when, time_ns);  // the earlier stays; the widget asks again when it draws
@@ -291,9 +292,16 @@ void WindowState::sync_text_input() {
   Widget* f = find(focused);
   const bool active = f && eligible(*f) && f->accepts_text();
   const RectI caret = active ? to_device(f->text_caret(), scale) : RectI{};
-  if (active == text_input_active && caret == text_input_caret) return;
+  const WidgetId target = active ? f->id() : WidgetId{};
+  // Focus moving from one text widget to another ends the first one's session: what it was
+  // composing, or half a character typed for it, must not reach the next.
+  if (active && text_input_active && target != text_input_target)
+    native->set_text_input(false, {});
+  else if (active == text_input_active && caret == text_input_caret)
+    return;
   text_input_active = active;
   text_input_caret = caret;
+  text_input_target = target;
   native->set_text_input(active, caret);
 }
 
@@ -310,6 +318,8 @@ void WindowState::cancel_press() {
 }
 
 void WindowState::release_subtree(const Widget& root) {
+  // Its timed redraws go: a widget shown again asks again when it draws.
+  std::erase_if(timed, [&](const auto& t) { return within(root, find(t.first)); });
   if (within(root, find(pressed))) cancel_press();
   if (within(root, find(focused))) {
     if (Widget* f = find(focused)) f->invalidate();

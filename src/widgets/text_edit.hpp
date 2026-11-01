@@ -80,7 +80,10 @@ class TextEdit {
   // Replaces `length` bytes at `at` with `added` (already one line), records the step, and puts
   // the caret after the new text.
   void replace(size_t at, size_t length, std::string_view added, StepKind kind);
-  bool merge(const Step& step);
+  bool merges(const Step& step) const;
+  std::string merged_text(const Step& step) const;
+  void absorb(const Step& step, std::string merged);  // allocates nothing
+  static void room_for_one(std::vector<Step>& steps);
   std::string fit(std::string_view added) const;  // cut to what the limit leaves room for
   size_t next(size_t byte) const;
   size_t prev(size_t byte) const;

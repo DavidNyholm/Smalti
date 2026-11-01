@@ -39,6 +39,8 @@ class Utf16Joiner {
  public:
   // The UTF-8 for this unit and any it completes; empty while it waits, or for a lone half.
   std::string push(char16_t unit);
+  // Drops a half waiting for its other half: text for another widget starts afresh.
+  void reset() { high_ = 0; }
 
  private:
   char16_t high_ = 0;  // a high surrogate waiting for its low one

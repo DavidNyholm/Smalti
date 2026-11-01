@@ -1,6 +1,9 @@
 // Chooses the platform backend.
+#include <algorithm>
 #include <charconv>
+#include <climits>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -33,6 +36,16 @@ float scale_from_dpi_text(const char* text) {
     return 1;
   }
   return dpi / kBaseDpi;
+}
+
+int poll_timeout_ms(int64_t due_ns, int64_t now_ns) {
+  constexpr uint64_t kNsPerMs = 1'000'000;
+  if (due_ns == INT64_MAX) return -1;
+  if (due_ns <= now_ns) return 0;  // also a time so far past that due - now would overflow
+  // Unsigned: the difference of two int64 values always fits, though it may not in an int64.
+  const uint64_t left = static_cast<uint64_t>(due_ns) - static_cast<uint64_t>(now_ns);
+  const uint64_t ms = left / kNsPerMs + (left % kNsPerMs != 0 ? 1 : 0);
+  return static_cast<int>(std::min<uint64_t>(ms, INT_MAX));
 }
 
 std::unique_ptr<PlatformBackend> create_backend(Backend kind,

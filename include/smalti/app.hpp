@@ -69,7 +69,8 @@ class App {
   // the system reports the change, and the theme reloads 50 ms after the last report, since
   // one save arrives as several. A file with errors leaves the current theme on screen and
   // reports them to on_theme_error (to stderr when no handler is set); the next good save
-  // applies. One file at a time: a new call replaces the last.
+  // applies. If the file's folder is deleted or moved, saves can no longer be seen, and
+  // on_theme_error is told so. One file at a time: a new call replaces the last.
   void watch_theme(const std::filesystem::path& file);
   void stop_watching_theme();
   // Receives a watched theme file's errors each time it fails to load. Set it before

@@ -224,7 +224,8 @@ void defaults(StyleState stage, StyledWidget w, size_t variant, const Theme& th,
         set(s, S::border, stage, th.border);
         set(s, S::text, stage, th.text);
         set(s, S::placeholder, stage, th.text_muted);
-        set(s, S::selection, stage, th.accent.with_alpha(kSelectionOpacity));
+        // "accent 35%": the accent's own opacity, times that (Themes.md).
+        set(s, S::selection, stage, th.accent.with_alpha(th.accent.a * kSelectionOpacity));
         set(s, S::caret, stage, th.text);
       } else if (stage == StyleState::hover) {
         set(s, S::border, stage, th.text_muted);

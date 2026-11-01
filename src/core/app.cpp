@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <type_traits>
 
 #include "core/state.hpp"
@@ -129,7 +131,13 @@ int64_t AppState::next_deadline_ns() const {
 void AppState::run_timers(int64_t now_ns) {
   if (theme_reload_at <= now_ns) {
     theme_reload_at = INT64_MAX;
-    guarded([&] { reload_theme(); });  // the error handler is the app's code
+    guarded([&] {  // the error handler is the app's code
+      if (theme_watch_ended) {
+        end_theme_watch();
+      } else {
+        reload_theme();
+      }
+    });
   }
   // By index: a redraw cannot open or close windows, but stays safe if one ever does.
   for (size_t i = 0; i < windows.size(); ++i) windows[i]->state().run_redraws(now_ns);
@@ -137,21 +145,48 @@ void AppState::run_timers(int64_t now_ns) {
 
 void AppState::watch_theme(const std::filesystem::path& file) {
   stop_watching_theme();
-  theme_file = file;
-  reload_theme();
+  const uint64_t watch = ++theme_watch;
+  // Absolute, so a later change of the working folder cannot make a save of this file reload
+  // another one.
+  std::error_code error;
+  std::filesystem::path absolute = std::filesystem::absolute(file, error);
+  theme_file = error ? file : std::move(absolute);
+  // The watch starts before the first load reports anything: a save made while the error
+  // handler runs (showing a dialog, say) is not missed.
+  std::optional<ThemeError> unwatched;
   try {
-    backend->watch_file(file,
-                        [this] { theme_reload_at = backend->now_ns() + kThemeReloadDelayNs; });
+    backend->watch_file(*theme_file, [this](bool ended) { theme_file_changed(ended); });
   } catch (const std::runtime_error& e) {
-    const ThemeError error{0, 0, e.what()};
-    report_theme_errors({&error, 1});
+    unwatched = ThemeError{0, 0, e.what()};
   }
+  reload_theme();
+  // The error handler may have watched another file, or stopped watching: that stands.
+  if (unwatched && theme_watch == watch) report_theme_errors({&*unwatched, 1});
 }
 
 void AppState::stop_watching_theme() {
   backend->stop_watching_file();
+  ++theme_watch;
   theme_file.reset();
   theme_reload_at = INT64_MAX;
+  theme_watch_ended = false;
+}
+
+void AppState::theme_file_changed(bool ended) {
+  // A save arrives as several reports: the reload waits for them to stop. The end of the watch
+  // is told at once.
+  theme_reload_at = backend->now_ns() + (ended ? 0 : kThemeReloadDelayNs);
+  if (ended) theme_watch_ended = true;
+}
+
+void AppState::end_theme_watch() {
+  theme_watch_ended = false;
+  const uint64_t watch = theme_watch;
+  const ThemeError error{0, 0,
+                         "the theme file's folder was moved or deleted, so its saves are no "
+                         "longer seen; call watch_theme() again to watch it"};
+  report_theme_errors({&error, 1});
+  if (theme_watch == watch) theme_file.reset();  // unless the handler watched a file again
 }
 
 void AppState::reload_theme() {

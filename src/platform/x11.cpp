@@ -205,7 +205,7 @@ class X11Backend final : public PlatformBackend {
   void wake() override;
   int64_t now_ns() const override { return monotonic_ns(); }
   SystemInfo system_info() const override;
-  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+  void watch_file(const std::filesystem::path& file, Callback<void(bool)> changed) override {
     watched_.start(file, std::move(changed));
   }
   void stop_watching_file() override { watched_.stop(); }
@@ -537,13 +537,13 @@ std::string X11Window::typed(XKeyEvent& key) {
     text.resize(static_cast<size_t>(std::max(n, 0)));
     return text;
   }
-  // No input method: the key's own character, read from its keysym (no dead keys).
+  // No input method: the key's own character, without dead keys. XLookupString gives Latin-1
+  // with Ctrl applied (Ctrl+A is 0x01, which the caller drops as a control); a key beyond
+  // Latin-1 gives nothing there, and is read from its Unicode keysym unless Ctrl is held.
   char latin1[8];
-  XLookupString(&key, latin1, sizeof latin1, &sym, nullptr);
-  if ((sym >= 0x20 && sym <= 0x7E) || (sym >= 0xA0 && sym <= 0xFF)) {
-    return detail::utf8_of(static_cast<uint32_t>(sym));  // Latin-1 keysyms are their characters
-  }
-  if ((sym & 0xFF000000) == kUnicodeKeysym) {
+  const int n = XLookupString(&key, latin1, sizeof latin1, &sym, nullptr);
+  if (n > 0) return detail::utf8_of_latin1(std::string_view(latin1, static_cast<size_t>(n)));
+  if ((sym & 0xFF000000) == kUnicodeKeysym && !(key.state & ControlMask)) {
     return detail::utf8_of(static_cast<uint32_t>(sym & 0x00FFFFFF));
   }
   return {};
@@ -677,9 +677,8 @@ void X11Backend::run() {
     if (quit_) break;
     int64_t due = host_.next_deadline_ns();
     for (X11Window* w : windows_) due = std::min(due, w->next_frame_due());
-    int timeout_ms = -1;
-    if (due != INT64_MAX)
-      timeout_ms = static_cast<int>(std::max<int64_t>(0, (due - now_ns() + 999'999) / 1'000'000));
+    if (clipboard_) due = std::min(due, clipboard_->next_deadline_ns());
+    const int timeout_ms = poll_timeout_ms(due, now_ns());
     XFlush(display_);
     // poll() skips a negative descriptor: the third entry is unused without a watched file.
     pollfd fds[3] = {{x_fd, POLLIN, 0},
@@ -693,6 +692,7 @@ void X11Backend::run() {
     }
     pump_events();
     watched_.poll();
+    if (clipboard_) clipboard_->drop_stalled_transfers();
     const int64_t now = now_ns();
     host_.run_timers(now);  // first, so a redraw that is due is drawn in this turn
     const size_t n = windows_.size();

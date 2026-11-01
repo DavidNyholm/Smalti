@@ -1,6 +1,7 @@
 // Live reload against real files: the system's own change reports (ReadDirectoryChangesW on
 // Windows, inotify on Linux), read by the headless backend without blocking, and the reload
 // that follows 50 ms after the last report.
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -230,4 +231,118 @@ TEST(reload_hands_back_an_exception_from_the_error_handler) {
     rethrown = std::string(e.what()) == "handler";
   }
   CHECK(rethrown);
+}
+
+namespace {
+
+// Saves the way editors do, by renaming a new file into place, which every system reports at
+// once (Windows reports a file rewritten in place only as its cache is written out).
+void save(const fs::path& target, std::string_view text) {
+  const fs::path temp = target.parent_path() / "save.tmp";
+  write(temp, text);
+  fs::rename(temp, target);
+}
+
+// Puts the working folder back, whatever a test does.
+class WorkingFolder {
+ public:
+  explicit WorkingFolder(const fs::path& to) : was_(fs::current_path()) { fs::current_path(to); }
+  ~WorkingFolder() {
+    std::error_code ignored;  // the test's own folder is about to go anyway
+    fs::current_path(was_, ignored);
+  }
+  WorkingFolder(const WorkingFolder&) = delete;
+  WorkingFolder& operator=(const WorkingFolder&) = delete;
+
+ private:
+  fs::path was_;
+};
+
+}  // namespace
+
+TEST(reload_sees_a_save_made_while_the_error_handler_runs) {
+  // The handler shows the errors (a dialog, say), and the user fixes the file meanwhile: the
+  // watch had already started, so that save reloads.
+  TempFolder dir;
+  const fs::path file = dir.path() / "live.jsonc";
+  write(file, accent_theme("#bad"));
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  testing::Driver d(win);
+  bool fixed = false;
+  app.on_theme_error([&](std::span<const ThemeError>) {
+    if (fixed) return;
+    fixed = true;
+    save(file, accent_theme("#00ff00"));
+  });
+  app.watch_theme(file);
+  CHECK(fixed);
+  CHECK(wait_for_report(d));
+  d.advance(100ms);
+  CHECK(app.theme().accent == kGreen);
+}
+
+TEST(reload_keeps_a_watch_the_error_handler_started) {
+  TempFolder first, second;
+  const fs::path broken = first.path() / "broken.jsonc", good = second.path() / "good.jsonc";
+  write(broken, accent_theme("#bad"));
+  write(good, accent_theme("#ff0000"));
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  testing::Driver d(win);
+  app.on_theme_error([&](std::span<const ThemeError>) { app.watch_theme(good); });
+  app.watch_theme(broken);
+  CHECK(app.theme().accent == kRed);  // the handler's file
+  save(good, accent_theme("#00ff00"));
+  CHECK(wait_for_report(d));
+  d.advance(100ms);
+  CHECK(app.theme().accent == kGreen);  // still watched: the outer call did not undo it
+}
+
+TEST(reload_reports_when_its_folder_is_deleted) {
+  TempFolder dir;
+  const fs::path folder = dir.path() / "themes";
+  fs::create_directories(folder);
+  const fs::path file = folder / "live.jsonc";
+  write(file, accent_theme("#ff0000"));
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  testing::Driver d(win);
+  std::vector<std::string> errors;
+  app.on_theme_error([&](std::span<const ThemeError> e) {
+    for (const ThemeError& x : e) errors.push_back(x.message);
+  });
+  app.watch_theme(file);
+  fs::remove_all(folder);
+  const auto told = [&] {
+    return std::any_of(errors.begin(), errors.end(), [](const std::string& m) {
+      return m.find("moved or deleted") != std::string::npos;
+    });
+  };
+  const auto give_up = std::chrono::steady_clock::now() + kReportTimeout;
+  while (!told() && std::chrono::steady_clock::now() < give_up) {
+    std::this_thread::sleep_for(10ms);
+    d.idle();
+    d.advance(60ms);
+  }
+  CHECK(told());
+  CHECK(app.theme().accent == kRed);  // the last good theme stays
+}
+
+TEST(reload_keeps_to_its_file_when_the_working_folder_changes) {
+  TempFolder here, elsewhere;
+  write(here.path() / "live.jsonc", accent_theme("#ff0000"));
+  write(elsewhere.path() / "live.jsonc", accent_theme("#0000ff"));
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  testing::Driver d(win);
+  {
+    const WorkingFolder in_here(here.path());
+    app.watch_theme("live.jsonc");
+  }
+  const WorkingFolder in_elsewhere(elsewhere.path());
+  save(here.path() / "live.jsonc", accent_theme("#00ff00"));
+  CHECK(wait_for_report(d));
+  d.advance(100ms);
+  CHECK(app.theme().accent == kGreen);  // the watched file, not the one now at that name
 }

@@ -773,7 +773,7 @@ MUTATIONS = [
     (
         "core/app.cpp",
         "a theme reloads at once instead of after the pause",
-        [("backend->now_ns() + kThemeReloadDelayNs", "backend->now_ns()")],
+        [("(ended ? 0 : kThemeReloadDelayNs)", "0")],
     ),
     (
         "platform/file_watch_win32.cpp",
@@ -885,15 +885,15 @@ MUTATIONS = [
         "text edit: typing after a space joins the word before it in one undo step",
         [
             (
-                "        return false;\n      }\n      last.added += step.added;",
-                "      }\n      last.added += step.added;",
+                "             kind_of(next_codepoint(text_, before)) != CharKind::space;",
+                "             kind_of(next_codepoint(text_, before)) != CharKind::space || first > 0;",
             )
         ],
     ),
     (
         "widgets/text_edit.cpp",
         "text edit: backspaces in a row are separate undo steps",
-        [("      if (step.at + step.removed.size() != last.at) return false;", "      return false;")],
+        [("      return step.at + step.removed.size() == last.at;", "      return false;")],
     ),
     (
         "widgets/text_edit.cpp",
@@ -983,12 +983,116 @@ MUTATIONS = [
     (
         "core/grid_columns.cpp",
         "grid spans: with no split that fits, spans over every stretch column still grow",
-        [("    std::erase_if(demands, [](const Demand& d) { return d.share >= kWholeShare; });\n", "")],
+        [("    std::erase_if(demands, [](const Demand& d) { return d.whole_share; });\n", "")],
     ),
     (
         "core/grid_columns.cpp",
         "grid spans: a span counts nothing from the fixed columns it covers",
         [("      if (columns[c].kind == ColumnRule::Kind::fixed) need -= columns[c].value;\n", "")],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: the text changes before the history has room for the step",
+        [
+            (
+                "  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);\n  text_.replace(at, length, added);",
+                "  text_.replace(at, length, added);\n  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);",
+            )
+        ],
+    ),
+    (
+        "widgets/text_edit.cpp",
+        "text edit: a phrase typed at once is one undo step",
+        [
+            (
+                "    if (at > start && kind != CharKind::space && before == CharKind::space) {",
+                "    if (at > start && kind != CharKind::space && before == CharKind::space && at == 0) {",
+            )
+        ],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: a double click selects at the nearest caret position",
+        [
+            (
+                "        edit_->select_word(char_at(e.position.x));  // the word under the pointer",
+                "        edit_->select_word(byte);",
+            )
+        ],
+    ),
+    (
+        "widgets/text_box.cpp",
+        "text box: a narrow box draws its caret outside itself",
+        [
+            (
+                "  const float inset = std::min(kTextInset, b.width * 0.5f);",
+                "  const float inset = kTextInset;",
+            ),
+            (
+                "  p.push_clip(Rect{area.x - kCaretRoom, b.y, area.width + 2 * kCaretRoom, b.height}.intersect(b));",
+                "  p.push_clip(Rect{area.x - kCaretRoom, b.y, area.width + 2 * kCaretRoom, b.height});",
+            ),
+        ],
+    ),
+    (
+        "theme/widget_styles.cpp",
+        "text box: the selection ignores the accent's own opacity",
+        [
+            (
+                "th.accent.with_alpha(th.accent.a * kSelectionOpacity)",
+                "th.accent.with_alpha(kSelectionOpacity)",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "typed text: focus moving between text widgets keeps the input method's session",
+        [
+            (
+                "  if (active && text_input_active && target != text_input_target)",
+                "  if (active && text_input_active && target != text_input_target && !active)",
+            )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "timed redraws: a removed widget's redraw stays waiting",
+        [("  std::erase_if(timed, [&](const auto& t) { return within(root, find(t.first)); });\n", "")],
+    ),
+    (
+        "core/window.cpp",
+        "timed redraws: a redraw that never comes is kept",
+        [("  if (time_ns == INT64_MAX) return;  // never: nothing to wait for\n", "")],
+    ),
+    (
+        "core/app.cpp",
+        "live reload: the first load runs before the watch starts",
+        [
+            (
+                "  std::optional<ThemeError> unwatched;\n  try {\n    backend->watch_file(*theme_file, [this](bool ended) { theme_file_changed(ended); });\n  } catch (const std::runtime_error& e) {\n    unwatched = ThemeError{0, 0, e.what()};\n  }\n  reload_theme();",
+                "  reload_theme();\n  std::optional<ThemeError> unwatched;\n  if (theme_watch == watch) {\n  try {\n    backend->watch_file(*theme_file, [this](bool ended) { theme_file_changed(ended); });\n  } catch (const std::runtime_error& e) {\n    unwatched = ThemeError{0, 0, e.what()};\n  }\n  }",
+            )
+        ],
+    ),
+    (
+        "core/app.cpp",
+        "live reload: the end of the watch is not reported",
+        [("  if (ended) theme_watch_ended = true;", "  (void)ended;")],
+    ),
+    (
+        "platform/backend.cpp",
+        "the X11 wait for a distant time overflows into a negative one",
+        [("  return static_cast<int>(std::min<uint64_t>(ms, INT_MAX));", "  return static_cast<int>(ms);")],
+    ),
+    (
+        "core/grid_columns.cpp",
+        "grid spans: a span over nearly all the stretch weight counts as over all of it",
+        [
+            (
+                "    const bool whole = sharing > 0 && covered == sharing;",
+                "    const bool whole = weights > 0 && weight / weights >= 1.0 - 1e-9;",
+            )
+        ],
     ),
 ]
 

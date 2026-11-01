@@ -47,6 +47,23 @@ struct Scope {
   long long allocations() const { return count().load(); }
   long long allocated_bytes() const { return bytes().load(); }
 };
+// While a FailOne lives, the allocation of at least `min_bytes` after `skip` others fails
+// (operator new throws std::bad_alloc), and only that one: code can be checked for what it
+// leaves behind when memory runs out at each point in turn. Smaller allocations are left
+// alone: MSVC's debug containers make small bookkeeping ones inside moves declared noexcept,
+// where a failure ends the program whatever the code around them does.
+std::atomic<long long>& fail_countdown();  // -1: none fails
+std::atomic<size_t>& fail_min_bytes();
+struct FailOne {
+  FailOne(long long skip, size_t min_bytes) {
+    fail_min_bytes() = min_bytes;
+    fail_countdown() = skip;
+  }
+  ~FailOne() { fail_countdown() = -1; }
+  FailOne(const FailOne&) = delete;
+  FailOne& operator=(const FailOne&) = delete;
+  bool failed() const { return fail_countdown().load() == -1; }
+};
 }  // namespace alloc_count
 
 template <class F>

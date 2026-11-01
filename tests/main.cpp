@@ -27,11 +27,24 @@ std::atomic<bool>& enabled() {
   static std::atomic<bool> on{false};
   return on;
 }
+std::atomic<long long>& fail_countdown() {
+  static std::atomic<long long> n{-1};
+  return n;
+}
+std::atomic<size_t>& fail_min_bytes() {
+  static std::atomic<size_t> n{0};
+  return n;
+}
 }  // namespace alloc_count
 
 namespace {
 
 void* counted_malloc(std::size_t size) {
+  if (const long long left = alloc_count::fail_countdown().load();
+      left >= 0 && size >= alloc_count::fail_min_bytes().load()) {
+    alloc_count::fail_countdown() = left - 1;
+    if (left == 0) return nullptr;  // this one fails; the next ones do not
+  }
   if (alloc_count::enabled().load(std::memory_order_relaxed)) {
     alloc_count::count().fetch_add(1);
     alloc_count::bytes().fetch_add(static_cast<long long>(size));

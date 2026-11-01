@@ -269,7 +269,8 @@ class TextBox : public Widget {
   float text_origin() const;
   void refresh_stops() const;
   size_t stop_of(size_t byte) const;
-  size_t byte_at(float x) const;
+  size_t byte_at(float x) const;  // the caret position nearest x
+  size_t char_at(float x) const;  // where the character under x starts
   void keep_caret_visible();
   bool caret_shown();  // and asks for the frame where the caret blinks next
   void edge_scroll();  // while a drag selects past either end

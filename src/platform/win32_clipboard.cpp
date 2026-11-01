@@ -70,11 +70,13 @@ std::optional<std::string> read_clipboard_text(HWND owner) {
   if (!memory) return std::nullopt;
   const GlobalLocked locked(memory);
   if (!locked.data()) return std::nullopt;
-  // The text ends at its NUL, or at the end of the block if a program left the NUL out.
-  const std::wstring_view block(static_cast<const wchar_t*>(locked.data()),
-                                GlobalSize(memory) / sizeof(wchar_t));
+  // The text ends at its NUL, or at the end of the block if a program left the NUL out. It is
+  // looked for only as far as the limit: UTF-8 takes at least a byte per UTF-16 unit, so more
+  // units than that is more bytes too, and a huge block is not scanned to find out.
+  const std::wstring_view block = std::wstring_view(static_cast<const wchar_t*>(locked.data()),
+                                                    GlobalSize(memory) / sizeof(wchar_t))
+                                      .substr(0, detail::kMaxClipboardBytes + 1);
   const std::wstring_view units = block.substr(0, std::min(block.find(L'\0'), block.size()));
-  // UTF-8 takes at least a byte per UTF-16 unit: more units than that is more bytes too.
   if (units.size() > detail::kMaxClipboardBytes) return std::nullopt;
   std::string out;
   if (units.empty()) return out;

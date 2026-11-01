@@ -178,7 +178,8 @@ Edit the file, save it, and the running app restyles itself.
 - The system reports the change (`ReadDirectoryChangesW` on Windows, `inotify` on Linux), so watching costs nothing while the file stays the same: no thread and no polling. The folder is watched rather than the file, because editors save by writing a new file and renaming it over the old one.
 - One save arrives as several reports, so the theme reloads once, 50 ms after the last of them.
 - A save with errors leaves the last good theme on screen. The errors go to the `on_theme_error` handler, or to stderr when there is none, and the next good save applies. Set the handler first to see the errors of the first load too.
-- One file at a time: a second `watch_theme` replaces the first, and `stop_watching_theme()` ends it. A folder that cannot be watched is reported as an error at line 0.
+- One file at a time: a second `watch_theme` replaces the first, and `stop_watching_theme()` ends it. A folder that cannot be watched is reported as an error at line 0. The file is remembered by its full path, so changing the working folder afterwards changes nothing.
+- If the file's folder is deleted, saves can no longer be seen: the handler is told so (an error at line 0), and calling `watch_theme` again watches the folder made in its place. On Linux a folder moved away is reported the same way; on Windows the watch goes with the moved folder, unreported.
 - The gallery does this with the file it is given: run `gallery night.jsonc`, then edit and save the file.
 
 ## Errors

@@ -1,6 +1,10 @@
 // Timed redraws: a widget asks for one frame at a time instead of a frame every refresh, so a
 // blinking caret costs two frames a second and an idle window nothing.
+#include <climits>
+
 #include "check.hpp"
+#include "core/state.hpp"
+#include "platform/platform.hpp"
 #include "support.hpp"
 
 using namespace smalti;
@@ -99,4 +103,38 @@ TEST(timing_a_delay_too_long_for_the_clock_never_comes) {
   blinker->ask_at(-1);
   d.frame();
   CHECK_EQ(blinker->paints - paints, 1);
+}
+
+TEST(timing_a_removed_widget_leaves_no_redraw_waiting) {
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  auto gone = win->add<Blinker>();
+  auto never = win->add<Blinker>();
+  gone->blinking = never->blinking = false;
+  testing::Driver d(win);
+  d.idle();
+  gone->ask_after(std::chrono::hours(1));
+  CHECK(detail::app_state().next_deadline_ns() != INT64_MAX);
+  gone->remove();
+  d.idle();
+  CHECK_EQ(detail::app_state().next_deadline_ns(), INT64_MAX);  // nothing left to wake for
+  CHECK(win->state().timed.empty());
+  // A redraw that never comes is not kept either.
+  never->ask_after(std::chrono::nanoseconds::max());
+  never->ask_at(INT64_MAX);
+  CHECK_EQ(detail::app_state().next_deadline_ns(), INT64_MAX);
+  CHECK(win->state().timed.empty());
+}
+
+TEST(timing_a_wait_converts_to_poll_milliseconds_safely) {
+  using platform::poll_timeout_ms;
+  constexpr int64_t kMs = 1'000'000;
+  CHECK_EQ(poll_timeout_ms(INT64_MAX, 0), -1);  // nothing to wait for
+  CHECK_EQ(poll_timeout_ms(5 * kMs, 5 * kMs), 0);
+  CHECK_EQ(poll_timeout_ms(INT64_MIN, 5 * kMs), 0);    // long past, without overflowing
+  CHECK_EQ(poll_timeout_ms(5 * kMs + 1, 5 * kMs), 1);  // rounded up: never early by a hair
+  CHECK_EQ(poll_timeout_ms(1000 * kMs, 0), 1000);
+  // 30 days is more milliseconds than an int holds: the wait is the longest one, not negative.
+  CHECK_EQ(poll_timeout_ms(int64_t{30} * 24 * 3600 * 1000 * kMs, 0), INT_MAX);
+  CHECK_EQ(poll_timeout_ms(INT64_MAX - 1, -1000), INT_MAX);
 }

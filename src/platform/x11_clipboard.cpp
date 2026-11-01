@@ -32,6 +32,9 @@ constexpr size_t kPieceBytes = 256 * 1024;
 constexpr size_t kChangePropertyHeaderBytes = 24;
 // Target and property pairs a MULTIPLE request may list: far more than any requestor uses.
 constexpr long kMaxMultiplePairs = 64;
+// Transfers in pieces under way at once. They share the text, so this bounds the bookkeeping
+// and the windows watched, not copies; a requestor asking for more is refused.
+constexpr size_t kMaxTransfers = 16;
 
 int64_t now_ns() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -45,6 +48,12 @@ struct XFreer {
 using XData = std::unique_ptr<unsigned char, XFreer>;
 
 const unsigned char* bytes_of(const void* p) { return static_cast<const unsigned char*>(p); }
+
+// Whether X server time `a` is before `b`. The time is 32 bits and wraps (about every 49
+// days), so the difference decides.
+bool earlier(Time a, Time b) {
+  return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b)) < 0;
+}
 
 // Requests on other programs' windows fail if the window is gone by the time they arrive, and
 // Xlib's default error handler ends the process. While a trap lives, errors are only counted.
@@ -114,7 +123,7 @@ X11Clipboard::~X11Clipboard() {
 std::optional<std::string> X11Clipboard::text() {
   const ::Window owner = XGetSelectionOwner(display_, atoms_.clipboard);
   if (owner == None) return std::nullopt;
-  if (owner == window_) return owned_;
+  if (owner == window_) return owned_ ? std::optional<std::string>(*owned_) : std::nullopt;
   const int64_t give_up = now_ns() + kTransferLimitNs;
   // UTF-8 first; a program that predates it may still offer Latin-1.
   for (const Atom target : {atoms_.utf8_string, Atom{XA_STRING}}) {
@@ -127,7 +136,8 @@ std::optional<std::string> X11Clipboard::text() {
 }
 
 bool X11Clipboard::set_text(std::string_view plain) {
-  std::string text(plain);  // first: running out of memory leaves the clipboard as it was
+  // First: running out of memory leaves the clipboard as it was.
+  auto text = std::make_shared<const std::string>(plain);
   // Ownership is taken with the server's time, not CurrentTime (ICCCM 2.1), and TIMESTAMP
   // reports it.
   const Time time = server_time();
@@ -137,6 +147,7 @@ bool X11Clipboard::set_text(std::string_view plain) {
     return false;
   }
   owned_ = std::move(text);
+  owned_latin1_.reset();
   owned_time_ = time;
   return true;
 }
@@ -149,7 +160,10 @@ bool X11Clipboard::handle(const XEvent& e) {
       return true;
     case SelectionClear:
       if (e.xselectionclear.window != window_) return false;
-      if (e.xselectionclear.selection == atoms_.clipboard) owned_.reset();
+      if (e.xselectionclear.selection == atoms_.clipboard) {
+        owned_.reset();
+        owned_latin1_.reset();
+      }
       return true;
     case SelectionNotify:
       return e.xselection.requestor == window_;  // a late answer to a paste that gave up
@@ -170,6 +184,7 @@ bool X11Clipboard::wait_for(XEvent& out, int64_t give_up, Match match) {
     // Reads what the server has sent, without blocking; other events stay queued, in order.
     while (XCheckIfEvent(display_, &out, &X11Clipboard::is_clipboard_event,
                          reinterpret_cast<XPointer>(this))) {
+      if (now_ns() >= give_up) return false;  // a steady stream of other events counts too
       if (match(out)) return true;
       handle(out);
       deadline = std::min(now_ns() + kAnswerWaitNs, give_up);  // the other side is still there
@@ -213,11 +228,12 @@ X11Clipboard::Got X11Clipboard::request(Atom target, int64_t give_up, std::strin
   });
   if (!answered) return Got::failed;
   if (e.xselection.property == None) return Got::refused;
-  // The property the owner names: ours, unless it answers an obsolete way.
-  const Atom property = e.xselection.property;
-  const std::optional<Property> p = take_property(property, detail::kMaxClipboardBytes);
+  // The answer is in the property we named (ICCCM 2.4). Any other is not read: an atom the
+  // owner made up would end the process with Xlib's error handler.
+  if (e.xselection.property != atoms_.transfer) return Got::failed;
+  const std::optional<Property> p = take_property(atoms_.transfer, detail::kMaxClipboardBytes);
   if (!p) return Got::failed;
-  if (p->type == atoms_.incr) return receive_pieces(property, give_up, out);
+  if (p->type == atoms_.incr) return receive_pieces(atoms_.transfer, give_up, out);
   return decode(*p, out);
 }
 
@@ -235,6 +251,8 @@ X11Clipboard::Got X11Clipboard::receive_pieces(Atom property, int64_t give_up, s
     const std::optional<Property> piece =
         take_property(property, detail::kMaxClipboardBytes - whole.bytes.size());
     if (!piece || piece->format != 8) return Got::failed;
+    // Every piece has the type of the first (ICCCM 2.7.2), the empty one that ends it too.
+    if (whole.type != None && piece->type != whole.type) return Got::failed;
     whole.type = piece->type;
     if (piece->bytes.empty()) return decode(whole, out);
     whole.bytes += piece->bytes;
@@ -283,8 +301,12 @@ void X11Clipboard::answer(const XSelectionRequestEvent& request) {
   drop_stalled_transfers();
   // An obsolete requestor names no property: the target is the property then (ICCCM 2.2).
   const Atom property = request.property != None ? request.property : request.target;
+  // A request timed before the App took the clipboard asked for what was there then
+  // (ICCCM 2.2); CurrentTime asks for whatever is there.
+  const bool stale = request.time != CurrentTime && owned_time_ != CurrentTime &&
+                     earlier(request.time, owned_time_);
   bool served = false;
-  if (owned_ && request.selection == atoms_.clipboard) {
+  if (owned_ && !stale && request.selection == atoms_.clipboard) {
     try {
       served = serve(request.requestor, request.target, property);
     } catch (const std::bad_alloc&) {
@@ -302,7 +324,9 @@ void X11Clipboard::answer(const XSelectionRequestEvent& request) {
   r.time = request.time;
   XSendEvent(display_, request.requestor, False, NoEventMask, &reply);
   if (trap.failed()) {  // the requestor is gone: it will ask for no piece
-    std::erase_if(outgoing_, [&](const Outgoing& o) { return o.requestor == request.requestor; });
+    for (auto t = outgoing_.begin(); t != outgoing_.end();) {
+      t = t->requestor == request.requestor ? outgoing_.erase(t) : t + 1;
+    }
   }
 }
 
@@ -322,13 +346,12 @@ bool X11Clipboard::serve(::Window requestor, Atom target, Atom property) {
     return true;
   }
   // TEXT lets the owner choose the encoding (ICCCM 2.6.2): UTF-8, as other toolkits answer.
-  if (target == atoms_.utf8_string || target == atoms_.text) {
-    send(requestor, property, atoms_.utf8_string, *owned_);
-    return true;
-  }
+  if (target == atoms_.utf8_string || target == atoms_.text)
+    return send(requestor, property, atoms_.utf8_string, owned_);
   if (target == XA_STRING) {
-    send(requestor, property, XA_STRING, detail::latin1_of(*owned_));
-    return true;
+    if (!owned_latin1_)
+      owned_latin1_ = std::make_shared<const std::string>(detail::latin1_of(*owned_));
+    return send(requestor, property, XA_STRING, owned_latin1_);
   }
   if (target == atoms_.multiple) return serve_multiple(requestor, property);
   return false;
@@ -361,22 +384,39 @@ bool X11Clipboard::serve_multiple(::Window requestor, Atom property) {
 }
 
 // Text that fits in one piece goes at once; larger text in pieces, after an INCR property that
-// announces its size.
-void X11Clipboard::send(::Window requestor, Atom property, Atom type, std::string data) {
-  if (data.size() <= max_piece_) {
-    XChangeProperty(display_, requestor, property, type, 8, PropModeReplace, bytes_of(data.data()),
-                    static_cast<int>(data.size()));
-    return;
-  }
-  // A new request for the same property replaces one still in progress.
-  std::erase_if(outgoing_, [&](const Outgoing& o) {
+// announces its size. False if it cannot be sent. Under the ErrorTrap of answer().
+bool X11Clipboard::send(::Window requestor, Atom property, Atom type,
+                        const std::shared_ptr<const std::string>& data) {
+  // A new request for the same property replaces one still in progress, whatever its size.
+  const auto same = std::find_if(outgoing_.begin(), outgoing_.end(), [&](const Outgoing& o) {
     return o.requestor == requestor && o.property == property;
   });
-  outgoing_.push_back({requestor, property, type, std::move(data), 0, now_ns()});
-  XSelectInput(display_, requestor, PropertyChangeMask);  // its deletions ask for pieces
-  const long size = static_cast<long>(outgoing_.back().data.size());
+  if (same != outgoing_.end()) stop_sending(same);
+  if (data->size() <= max_piece_) {
+    XChangeProperty(display_, requestor, property, type, 8, PropModeReplace, bytes_of(data->data()),
+                    static_cast<int>(data->size()));
+    return true;
+  }
+  if (outgoing_.size() >= kMaxTransfers) return false;
+  // The requestor's deletions ask for pieces, so this connection watches its property changes,
+  // on top of whatever it watched there before (on one of the App's own windows, its input),
+  // which is put back when the last transfer to it ends.
+  long restore_mask = NoEventMask;
+  const auto other = std::find_if(outgoing_.begin(), outgoing_.end(),
+                                  [&](const Outgoing& o) { return o.requestor == requestor; });
+  if (other != outgoing_.end()) {
+    restore_mask = other->restore_mask;
+  } else {
+    XWindowAttributes attributes;
+    if (!XGetWindowAttributes(display_, requestor, &attributes)) return false;  // gone
+    restore_mask = attributes.your_event_mask;
+    XSelectInput(display_, requestor, restore_mask | PropertyChangeMask);
+  }
+  outgoing_.push_back({requestor, property, type, data, 0, now_ns(), restore_mask});
+  const long size = static_cast<long>(data->size());
   XChangeProperty(display_, requestor, property, atoms_.incr, 32, PropModeReplace, bytes_of(&size),
                   1);
+  return true;
 }
 
 bool X11Clipboard::send_next_piece(const XPropertyEvent& e) {
@@ -386,9 +426,9 @@ bool X11Clipboard::send_next_piece(const XPropertyEvent& e) {
   if (t == outgoing_.end()) return sending_to(e.window);  // another property of a requestor's
   if (e.state != PropertyDelete) return true;             // the piece we just wrote
   ErrorTrap trap(display_);
-  const size_t n = std::min(max_piece_, t->data.size() - t->sent);
+  const size_t n = std::min(max_piece_, t->data->size() - t->sent);
   XChangeProperty(display_, t->requestor, t->property, t->type, 8, PropModeReplace,
-                  bytes_of(t->data.data() + t->sent), static_cast<int>(n));
+                  bytes_of(t->data->data() + t->sent), static_cast<int>(n));
   t->sent += n;
   t->last_ns = now_ns();
   // The empty piece ends the transfer; a piece that failed means the requestor is gone.
@@ -404,14 +444,22 @@ bool X11Clipboard::sending_to(::Window requestor) const {
 // Under an ErrorTrap: the requestor may be gone.
 void X11Clipboard::stop_sending(std::vector<Outgoing>::iterator transfer) {
   const ::Window requestor = transfer->requestor;
+  const long restore_mask = transfer->restore_mask;
   outgoing_.erase(transfer);
-  if (!sending_to(requestor)) XSelectInput(display_, requestor, NoEventMask);
+  if (!sending_to(requestor)) XSelectInput(display_, requestor, restore_mask);
 }
 
-// Under an ErrorTrap, like stop_sending.
+int64_t X11Clipboard::next_deadline_ns() const {
+  int64_t due = INT64_MAX;
+  for (const Outgoing& o : outgoing_) due = std::min(due, o.last_ns + kTransferLimitNs);
+  return due;
+}
+
 void X11Clipboard::drop_stalled_transfers() {
   const int64_t now = now_ns();
-  const auto stalled = [&](const Outgoing& o) { return now - o.last_ns > kTransferLimitNs; };
+  const auto stalled = [&](const Outgoing& o) { return now - o.last_ns >= kTransferLimitNs; };
+  if (std::none_of(outgoing_.begin(), outgoing_.end(), stalled)) return;
+  ErrorTrap trap(display_);  // the requestors may be gone
   for (auto t = std::find_if(outgoing_.begin(), outgoing_.end(), stalled); t != outgoing_.end();
        t = std::find_if(outgoing_.begin(), outgoing_.end(), stalled)) {
     stop_sending(t);

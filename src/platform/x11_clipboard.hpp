@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,6 +30,11 @@ class X11Clipboard {
   // Handles an event that belongs to the clipboard (a program asking for the text, a transfer
   // moving on) and returns true; false for any other event.
   bool handle(const XEvent& e);
+  // When a transfer in pieces will have waited too long for its requestor (INT64_MAX if none
+  // runs), and giving up on those that have: the loop calls it then, so an abandoned transfer
+  // ends without any other clipboard event.
+  int64_t next_deadline_ns() const;
+  void drop_stalled_transfers();
 
  private:
   struct Atoms {
@@ -47,9 +53,10 @@ class X11Clipboard {
     ::Window requestor;
     Atom property;
     Atom type;
-    std::string data;
+    std::shared_ptr<const std::string> data;  // shared: many transfers hold one copy
     size_t sent = 0;
     int64_t last_ns = 0;  // when it last asked: a requestor that stops is not waited for
+    long restore_mask = NoEventMask;  // what this connection asked of the window before
   };
   enum class Got { text, refused, failed };
 
@@ -66,18 +73,19 @@ class X11Clipboard {
   void answer(const XSelectionRequestEvent& request);
   bool serve(::Window requestor, Atom target, Atom property);
   bool serve_multiple(::Window requestor, Atom property);
-  void send(::Window requestor, Atom property, Atom type, std::string data);
+  bool send(::Window requestor, Atom property, Atom type,
+            const std::shared_ptr<const std::string>& data);
   bool send_next_piece(const XPropertyEvent& e);
   bool sending_to(::Window requestor) const;
   void stop_sending(std::vector<Outgoing>::iterator transfer);
-  void drop_stalled_transfers();
   void hand_over();
 
   Display* display_;
   Atoms atoms_{};
   ::Window window_ = None;  // never mapped: it owns the selection and receives answers
   size_t max_piece_ = 0;
-  std::optional<std::string> owned_;  // the text while the App owns the selection
+  std::shared_ptr<const std::string> owned_;         // the text while the App owns the selection
+  std::shared_ptr<const std::string> owned_latin1_;  // the same as STRING, made when first asked
   Time owned_time_ = CurrentTime;
   std::vector<Outgoing> outgoing_;
 };

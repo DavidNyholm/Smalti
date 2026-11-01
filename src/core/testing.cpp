@@ -135,6 +135,8 @@ bool Driver::frame_requested() const { return native(window_).frame_requested();
 
 bool Driver::text_input_active() const { return native(window_).text_input(); }
 
+int Driver::text_input_sessions() const { return native(window_).text_input_sessions(); }
+
 Rect Driver::text_input_caret() const {
   const detail::RectI c = native(window_).text_caret();
   const float s = native(window_).scale();

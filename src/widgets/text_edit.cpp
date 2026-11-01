@@ -12,6 +12,7 @@ namespace smalti::detail {
 namespace {
 
 constexpr size_t kMaxUndoSteps = 1000;  // older steps are forgotten
+constexpr size_t kFirstStepRoom = 16;   // history grows by doubling from this
 
 bool continuation(char c) { return (static_cast<uint8_t>(c) & 0xC0) == 0x80; }
 
@@ -95,7 +96,23 @@ void TextEdit::set_max_chars(size_t max_chars) {
 bool TextEdit::type(std::string_view utf8) {
   const std::string added = fit(one_line(utf8));
   if (added.empty()) return false;  // nothing to type, or no room for it
-  replace(selection_start(), selection_end() - selection_start(), added, StepKind::typing);
+  // Each word typed after a space is an undo step of its own, however the text arrives: a key
+  // at a time, or a whole phrase from an input method at once. So the text goes in by words.
+  const std::string_view text = added;
+  size_t start = 0;
+  CharKind before = CharKind::word;
+  for (size_t i = 0; i < text.size();) {
+    const size_t at = i;
+    const CharKind kind = kind_of(next_codepoint(text, i));
+    if (at > start && kind != CharKind::space && before == CharKind::space) {
+      replace(selection_start(), selection_end() - selection_start(),
+              text.substr(start, at - start), StepKind::typing);
+      start = at;
+    }
+    before = kind;
+  }
+  replace(selection_start(), selection_end() - selection_start(), text.substr(start),
+          StepKind::typing);
   return true;
 }
 
@@ -188,6 +205,9 @@ void TextEdit::select_word(size_t byte) {
 
 bool TextEdit::undo() {
   if (undo_.empty()) return false;
+  // What may run out of memory comes before anything changes (see replace).
+  text_.reserve(text_.size() - undo_.back().added.size() + undo_.back().removed.size());
+  room_for_one(redo_);
   Step s = std::move(undo_.back());
   undo_.pop_back();
   text_.replace(s.at, s.added.size(), s.removed);
@@ -200,6 +220,8 @@ bool TextEdit::undo() {
 
 bool TextEdit::redo() {
   if (redo_.empty()) return false;
+  text_.reserve(text_.size() - redo_.back().removed.size() + redo_.back().added.size());
+  room_for_one(undo_);
   Step s = std::move(redo_.back());
   redo_.pop_back();
   text_.replace(s.at, s.removed.size(), s.added);
@@ -208,6 +230,11 @@ bool TextEdit::redo() {
   undo_.push_back(std::move(s));
   open_ = false;
   return true;
+}
+
+void TextEdit::room_for_one(std::vector<Step>& steps) {
+  if (steps.size() < steps.capacity()) return;
+  steps.reserve(std::max(kFirstStepRoom, steps.capacity() * 2));
 }
 
 size_t TextEdit::word_left(size_t byte) const {
@@ -246,10 +273,18 @@ void TextEdit::replace(size_t at, size_t length, std::string_view added, StepKin
   step.anchor_before = anchor_;
   step.caret_after = step.anchor_after = at + added.size();
   step.kind = kind;
+  // Everything that may run out of memory comes before anything changes, so a failure leaves
+  // the text and its history as they were: the steps hold byte offsets into this very text.
+  text_.reserve(text_.size() - length + added.size());
+  const bool merging = merges(step);
+  std::string merged = merging ? merged_text(step) : std::string();
+  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);
   text_.replace(at, length, added);
   caret_ = anchor_ = step.caret_after;
   redo_.clear();
-  if (!merge(step)) {
+  if (merging) {
+    absorb(step, std::move(merged));
+  } else {
     if (undo_.size() == kMaxUndoSteps) undo_.erase(undo_.begin());
     undo_.push_back(std::move(step));
   }
@@ -258,37 +293,54 @@ void TextEdit::replace(size_t at, size_t length, std::string_view added, StepKin
 
 // Typing at the end of the last typing step, or erasing next to the last erasing step, adds to
 // that step while it is open.
-bool TextEdit::merge(const Step& step) {
+bool TextEdit::merges(const Step& step) const {
   if (!open_ || undo_.empty() || undo_.back().kind != step.kind) return false;
-  Step& last = undo_.back();
+  const Step& last = undo_.back();
   switch (step.kind) {
     case StepKind::typing: {
       if (!step.removed.empty() || step.at != last.at + last.added.size()) return false;
       // A word typed after a space starts a step of its own. (The step adds to the last one,
       // so something stands before it.)
       size_t first = 0, before = prev(step.at);
-      if (kind_of(next_codepoint(step.added, first)) != CharKind::space &&
-          kind_of(next_codepoint(text_, before)) == CharKind::space) {
-        return false;
-      }
-      last.added += step.added;
-      break;
+      return kind_of(next_codepoint(step.added, first)) == CharKind::space ||
+             kind_of(next_codepoint(text_, before)) != CharKind::space;
     }
     case StepKind::erasing_back:
-      if (step.at + step.removed.size() != last.at) return false;
-      last.at = step.at;
-      last.removed.insert(0, step.removed);
-      break;
+      return step.at + step.removed.size() == last.at;
     case StepKind::erasing_forward:
-      if (step.at != last.at) return false;
-      last.removed += step.removed;
-      break;
+      return step.at == last.at;
     case StepKind::other:
-      return false;
+      break;
   }
+  return false;
+}
+
+// What the last step holds once `step` joins it: all the text typed, or all the text erased.
+std::string TextEdit::merged_text(const Step& step) const {
+  const Step& last = undo_.back();
+  switch (step.kind) {
+    case StepKind::typing:
+      return last.added + step.added;
+    case StepKind::erasing_back:
+      return step.removed + last.removed;
+    case StepKind::erasing_forward:
+      return last.removed + step.removed;
+    case StepKind::other:
+      break;
+  }
+  return {};
+}
+
+void TextEdit::absorb(const Step& step, std::string merged) {
+  Step& last = undo_.back();
+  if (step.kind == StepKind::typing) {
+    last.added = std::move(merged);
+  } else {
+    last.removed = std::move(merged);
+  }
+  if (step.kind == StepKind::erasing_back) last.at = step.at;
   last.caret_after = step.caret_after;
   last.anchor_after = step.anchor_after;
-  return true;
 }
 
 std::string TextEdit::fit(std::string_view added) const {

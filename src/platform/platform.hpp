@@ -86,6 +86,10 @@ int window_pixels(float logical, float scale);
 // The display scale for a dots-per-inch setting written as text (X11's Xft.dpi): 1 unless it
 // is a whole, finite number inside the range screens have.
 float scale_from_dpi_text(const char* text);
+// The milliseconds a poll() waits for `due_ns` from `now_ns`: -1 (no limit) for INT64_MAX,
+// 0 for a time already past, rounded up, and at most INT_MAX, so a distant time still wakes
+// the loop (early, which is harmless) instead of overflowing into a negative wait.
+int poll_timeout_ms(int64_t due_ns, int64_t now_ns);
 
 // Implemented by the App: what the backend calls that is not about one window.
 class BackendHost {
@@ -116,11 +120,14 @@ class PlatformBackend {
   virtual void wake() = 0;  // thread-safe: calls host.on_wake() on the UI thread soon
   virtual int64_t now_ns() const = 0;
   virtual SystemInfo system_info() const = 0;
-  // Calls `changed` on the UI thread, from the loop, whenever `file` changes: the watch joins the
-  // loop's wait (platform/file_watch.hpp), so it costs nothing until something changes. One file
-  // at a time: a new call replaces the last. Throws std::runtime_error, with nothing watched, if
-  // the file's folder cannot be watched.
-  virtual void watch_file(const std::filesystem::path& file, Callback<void()> changed) = 0;
+  // Calls `changed(false)` on the UI thread, from the loop, whenever `file` changes: the watch
+  // joins the loop's wait (platform/file_watch.hpp), so it costs nothing until something
+  // changes. If the watch ends by itself (the file's folder was deleted or moved), it calls
+  // `changed(true)` once and watches nothing more. One file at a time: a new call replaces the
+  // last. Throws std::runtime_error, with nothing watched, if the file's folder cannot be
+  // watched.
+  virtual void watch_file(const std::filesystem::path& file,
+                          Callback<void(bool ended)> changed) = 0;
   virtual void stop_watching_file() = 0;
   // The system clipboard's text in UTF-8, as the system holds it (the core makes it plain:
   // detail::plain_text); nullopt if it holds no text, more than detail::kMaxClipboardBytes, or

@@ -145,3 +145,30 @@ TEST(text_input_caret_follows_layout_and_scale) {
   d.frame();
   CHECK(same(d.text_input_caret(), target->text_caret()));
 }
+
+TEST(text_input_each_text_widget_gets_a_session_of_its_own) {
+  // Focus moving from one text widget to another switches the input method off and on, which
+  // drops what was being composed for the first; a caret move within one does not.
+  App app(headless());
+  auto win = app.open_window({"t", {200, 100}});
+  auto col = win->add<Column>();
+  auto a = col->add<TextTarget>();
+  auto b = col->add<TextTarget>();
+  testing::Driver d(win);
+  a->focus();
+  d.idle();
+  CHECK(d.text_input_active());
+  CHECK_EQ(d.text_input_sessions(), 1);
+  a->move_caret(20);
+  d.idle();
+  CHECK_EQ(d.text_input_sessions(), 1);
+  b->focus();
+  d.idle();
+  CHECK(d.text_input_active());
+  CHECK_EQ(d.text_input_sessions(), 2);
+  // Half a character typed for one widget is not completed by the next one's.
+  detail::Utf16Joiner joiner;
+  CHECK(joiner.push(0xD83D).empty());
+  joiner.reset();
+  CHECK(joiner.push(0xDE00).empty());
+}

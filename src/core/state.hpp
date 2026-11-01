@@ -126,6 +126,7 @@ struct WindowState final : platform::WindowEvents {
   std::vector<std::pair<WidgetId, int64_t>> timed;      // widget, when to redraw it
   bool text_input_active = false;                       // as last told to the platform
   RectI text_input_caret{};
+  WidgetId text_input_target{};  // the widget the input method is on for
 };
 
 struct AppState final : platform::BackendHost {
@@ -140,6 +141,8 @@ struct AppState final : platform::BackendHost {
   void watch_theme(const std::filesystem::path& file);
   void stop_watching_theme();
   void reload_theme();  // applies the file if it is valid, reports its errors if not
+  void theme_file_changed(bool ended);  // from the backend's watch
+  void end_theme_watch();               // reports that saves are no longer seen
   void report_theme_errors(std::span<const ThemeError> errors);
   // Runs fn, catching anything it throws: the first exception stops the loop and is rethrown
   // from run(). Pending removals are processed once the outermost guarded call returns: a
@@ -167,8 +170,10 @@ struct AppState final : platform::BackendHost {
   platform::SystemInfo system;
   Theme theme;
   WidgetStyles styles;  // the theme's widget styles, computed whenever the theme is set
-  std::optional<std::filesystem::path> theme_file;  // watched, when set
+  std::optional<std::filesystem::path> theme_file;  // watched, when set; absolute
   int64_t theme_reload_at = INT64_MAX;              // a change was reported: reload then
+  bool theme_watch_ended = false;                   // its folder went: say so, at reload time
+  uint64_t theme_watch = 0;  // counts watches started and stopped: a nested call is seen
   Callback<void(std::span<const ThemeError>)> theme_error_handler;
   FontSet fonts;
   GlyphCache glyphs;

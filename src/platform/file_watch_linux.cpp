@@ -17,8 +17,9 @@ namespace {
 
 // What counts as a change: a file written and closed, created, deleted, or renamed into or out
 // of the folder (a save that replaces the file). Not every write: a save arrives at its close.
-constexpr uint32_t kEvents =
-    IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM | IN_DELETE_SELF;
+// The folder itself deleted or moved ends the watch: the path no longer leads to it.
+constexpr uint32_t kEvents = IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM |
+                             IN_DELETE_SELF | IN_MOVE_SELF;
 // Room for many events per read; the loop reads until the queue is empty anyway.
 constexpr size_t kBufferBytes = 16 * 1024;
 
@@ -55,21 +56,22 @@ FileWatch::~FileWatch() { close(state_->fd); }
 
 Waitable FileWatch::waitable() const { return state_->fd; }
 
-bool FileWatch::take_changes() {
+FileWatch::Report FileWatch::take_changes() {
   alignas(inotify_event) char buffer[kBufferBytes];
-  bool changed = false;
+  bool changed = false, ended = false;
   for (;;) {
     const ssize_t got = read(state_->fd, buffer, sizeof buffer);
     if (got <= 0) break;  // EAGAIN: nothing more queued
     for (ssize_t offset = 0; offset + static_cast<ssize_t>(sizeof(inotify_event)) <= got;) {
       const auto* e = reinterpret_cast<const inotify_event*>(buffer + offset);
-      // An overflow, or the folder itself gone, may have included the file.
-      if (e->mask & (IN_Q_OVERFLOW | IN_DELETE_SELF | IN_IGNORED)) changed = true;
+      if (e->mask & IN_Q_OVERFLOW) changed = true;  // may have included the file
+      if (e->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) ended = true;
       if (e->len > 0 && state_->name == e->name) changed = true;
       offset += static_cast<ssize_t>(sizeof(inotify_event) + e->len);
     }
   }
-  return changed;
+  if (ended) return Report::ended;
+  return changed ? Report::changed : Report::nothing;
 }
 
 }  // namespace smalti::platform

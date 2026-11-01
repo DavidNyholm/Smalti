@@ -51,6 +51,9 @@ class Driver {
   // where its windows go: the caret, in logical pixels.
   bool text_input_active() const;
   Rect text_input_caret() const;
+  // How many times the input method was switched on: each text widget that gains focus gets a
+  // session of its own, so what was being composed for the last one is dropped.
+  int text_input_sessions() const;
 
  private:
   Ref<Window> window_;

@@ -97,17 +97,19 @@ FileWatch::~FileWatch() {
 
 Waitable FileWatch::waitable() const { return state_->event; }
 
-bool FileWatch::take_changes() {
+FileWatch::Report FileWatch::take_changes() {
   State& s = *state_;
-  if (!s.armed || WaitForSingleObject(s.event, 0) != WAIT_OBJECT_0) return false;
+  if (!s.armed || WaitForSingleObject(s.event, 0) != WAIT_OBJECT_0) return Report::nothing;
   DWORD bytes = 0;
   bool changed = true;  // a failed read (the folder went away) or an overflow may include it
   if (GetOverlappedResult(s.folder, &s.overlapped, &bytes, FALSE) && bytes > 0) {
     changed = s.names_file(bytes);
   }
   ResetEvent(s.event);
-  s.arm();  // when this fails the folder is gone: the event stays clear and nothing more comes
-  return changed;
+  // Failing to read on means the folder is gone (deleted): nothing more would come. A folder
+  // moved elsewhere is not noticed; the watch goes on reporting it at its new place.
+  if (!s.arm()) return Report::ended;
+  return changed ? Report::changed : Report::nothing;
 }
 
 }  // namespace smalti::platform

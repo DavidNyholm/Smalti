@@ -106,7 +106,9 @@ void TextBox::arrange(Rect bounds) {
 
 Rect TextBox::text_area() const {
   const Rect b = bounds();
-  return {b.x + kTextInset, b.y, std::max(0.0f, b.width - 2 * kTextInset), b.height};
+  // A box narrower than its insets keeps its text area, and so its caret, inside itself.
+  const float inset = std::min(kTextInset, b.width * 0.5f);
+  return {b.x + inset, b.y, std::max(0.0f, b.width - 2 * inset), b.height};
 }
 
 float TextBox::text_origin() const { return text_area().x - scroll_; }
@@ -155,6 +157,16 @@ size_t TextBox::byte_at(float x) const {
   if (it == stop_x_.end()) return stop_byte_.back();
   if (it != stop_x_.begin() && local - *(it - 1) < *it - local) --it;
   return stop_byte_[static_cast<size_t>(it - stop_x_.begin())];
+}
+
+size_t TextBox::char_at(float x) const {
+  refresh_stops();
+  const float local = x - text_origin();
+  // The last stop at or left of x starts the character there; past the end, the last one.
+  auto it = std::upper_bound(stop_x_.begin(), stop_x_.end(), local);
+  if (it != stop_x_.begin()) --it;
+  const auto i = static_cast<size_t>(it - stop_x_.begin());
+  return stop_byte_[std::min(i, stop_byte_.size() > 1 ? stop_byte_.size() - 2 : 0)];
 }
 
 void TextBox::keep_caret_visible() {
@@ -256,7 +268,8 @@ void TextBox::paint(Painter& p) {
   const float ascent = detail::text_ascent(st);
   const float height = ascent + detail::text_descent(st);
   const Rect area = text_area();
-  p.push_clip({area.x - kCaretRoom, b.y, area.width + 2 * kCaretRoom, b.height});
+  // Room for a caret at either end, but never outside the box, which is all a repaint covers.
+  p.push_clip(Rect{area.x - kCaretRoom, b.y, area.width + 2 * kCaretRoom, b.height}.intersect(b));
   const float origin = text_origin();
   if (edit_->text().empty()) {
     if (!placeholder_.empty())
@@ -285,7 +298,7 @@ bool TextBox::on_mouse(const MouseEvent& e) {
       if (e.clicks >= 3) {
         edit_->select_all();
       } else if (e.clicks == 2) {
-        edit_->select_word(byte);
+        edit_->select_word(char_at(e.position.x));  // the word under the pointer
       } else {
         edit_->move_to(byte, e.modifiers.shift);
       }

@@ -26,8 +26,6 @@ namespace {
 constexpr double kFitSlack = 0.01;
 // Newton steps before giving up. Each crosses a kink of H; real grids have a few.
 constexpr int kMaxSteps = 64;
-// A span whose share is this close to 1 covers every sharing column.
-constexpr double kWholeShare = 1.0 - 1e-9;
 
 // A width and its rate of change as the growing columns' total rises.
 struct Linear {
@@ -40,6 +38,7 @@ struct Demand {
   size_t from;         // where its growth goes: [from, last)
   double need;         // what it needs from them and its share
   double share;        // the part of the shared width it covers
+  bool whole_share;    // it covers every sharing column that takes a share
 };
 
 // Puts the demands in the order the greedy takes them, by right end and the narrower first of
@@ -115,6 +114,7 @@ std::vector<float> solve_columns(std::span<const ColumnRule> columns,
   std::vector<size_t> growing_before(n + 1, 0);  // growing columns left of column c
   std::vector<double> least;
   double fixed = 0, weights = 0;
+  size_t sharing = 0;  // sharing columns with a weight above zero
   for (size_t c = 0; c < n; ++c) {
     growing_before[c + 1] = growing_before[c];
     switch (columns[c].kind) {
@@ -127,6 +127,7 @@ std::vector<float> solve_columns(std::span<const ColumnRule> columns,
         break;
       case ColumnRule::Kind::shares:
         weights += columns[c].value;
+        if (columns[c].value > 0) ++sharing;
         break;
     }
   }
@@ -137,11 +138,18 @@ std::vector<float> solve_columns(std::span<const ColumnRule> columns,
     const size_t first = growing_before[s.first], last = growing_before[s.last];
     if (first == last) continue;
     double need = s.need, weight = 0;
+    size_t covered = 0;
     for (size_t c = s.first; c < s.last; ++c) {
       if (columns[c].kind == ColumnRule::Kind::fixed) need -= columns[c].value;
-      if (columns[c].kind == ColumnRule::Kind::shares) weight += columns[c].value;
+      if (columns[c].kind == ColumnRule::Kind::shares) {
+        weight += columns[c].value;
+        if (columns[c].value > 0) ++covered;
+      }
     }
-    demands.push_back({first, last, first, need, weights > 0 ? weight / weights : 0.0});
+    // Counted, not judged from the share, which rounding can bring next to 1 (a weight of
+    // 1e10 beside one of 1).
+    const bool whole = sharing > 0 && covered == sharing;
+    demands.push_back({first, last, first, need, weights > 0 ? weight / weights : 0.0, whole});
   }
   order(demands, least.size());
 
@@ -150,7 +158,7 @@ std::vector<float> solve_columns(std::span<const ColumnRule> columns,
   if (!x) {
     // No split fits. A span over every sharing column gains nothing from growth until the
     // sharing columns are gone, so it keeps what sharing gives it; the rest are made to fit.
-    std::erase_if(demands, [](const Demand& d) { return d.share >= kWholeShare; });
+    std::erase_if(demands, [](const Demand& d) { return d.whole_share; });
     order(demands, least.size());
     x = narrowest_fit(least, demands, share_room);
     if (!x) x = fill(least, demands, 0.0);  // overflowing: the sharing columns get nothing

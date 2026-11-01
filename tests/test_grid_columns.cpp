@@ -97,6 +97,15 @@ TEST(grid_columns_a_span_over_most_of_the_stretch_weight_fits_exactly) {
   CHECK_NEAR(w[2], 5.0f, kSlack);
 }
 
+TEST(grid_columns_a_span_over_nearly_all_the_stretch_weight_still_fits) {
+  // Its share rounds to 1, but it does not cover every stretch column: when no split fits, it
+  // is made to fit like any span short of all of them.
+  const std::vector<ColumnRule> cols{grows(), shares(1e10f), shares(1)};
+  const std::vector<SpanNeed> spans{{0, 2, 150}};
+  const std::vector<float> w = solve_columns(cols, spans, 100);
+  CHECK(across(w, spans[0]) >= 150 - kSlack);
+}
+
 TEST(grid_columns_spans_over_part_of_the_stretch_weight_share_it_out) {
   // Both spans cover the heavier stretch column, which alone gives each of them enough.
   const std::vector<ColumnRule> cols{grows(), shares(3), grows(), shares(1)};

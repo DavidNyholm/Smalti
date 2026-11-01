@@ -31,7 +31,7 @@ Every built-in control, what it does, and how it works from the keyboard. All of
 - **Mouse:** a click places the caret, a drag selects (and scrolls when it passes either end), a double click selects a word, a triple click everything, and Shift+click extends the selection.
 - **Words** are runs of letters, digits and underscores (any character beyond ASCII counts as a letter), of punctuation, or of spaces. Ctrl+Right goes past a word and the spaces after it, as in Windows editors.
 - **Characters are code points:** an emoji with a skin tone, or a letter followed by a separate combining accent, takes more than one step of the caret. Precomposed letters, which keyboards type, are one. Grapheme clusters come with complex scripts, after v0.5.
-- **Undo** keeps typing together a word at a time; a pause of a second or a caret move starts a new step, and a paste is a step of its own.
+- **Undo** keeps typing together a word at a time, whether it was typed a key at a time or committed as a phrase by an input method; a pause of a second or a caret move starts a new step, and a paste is a step of its own.
 - **Pasted text** is made one line: line breaks inside become spaces, those at either end are dropped, and tabs become spaces.
 - **`password = true`** shows a dot for each character, and refuses copy and cut. **`max_length`** counts characters; typing and pasting stop at it.
 - **The caret** blinks at the system's rate (Windows' setting; 530 ms elsewhere) on timed redraws, so a focused text box costs about two frames a second, and none once the caret stops blinking, 10 seconds after the last input. It is one device pixel wide at any scale.

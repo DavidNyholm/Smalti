@@ -256,7 +256,7 @@ class Win32Backend final : public PlatformBackend {
   void wake() override;
   int64_t now_ns() const override { return qpc_ns(); }
   SystemInfo system_info() const override;
-  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+  void watch_file(const std::filesystem::path& file, Callback<void(bool)> changed) override {
     watched_.start(file, std::move(changed));
   }
   void stop_watching_file() override { watched_.stop(); }
@@ -516,11 +516,12 @@ void Win32Window::set_text_input(bool active, RectI caret) {
   if (active != ime_on_) {
     if (!active) {
       // Text still being composed belonged to the widget that lost focus: drop it rather than
-      // commit it to whatever has focus now.
+      // commit it to whatever has focus now. So does half a character typed for it.
       if (const HIMC context = ImmGetContext(hwnd_)) {
         ImmNotifyIME(context, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
         ImmReleaseContext(hwnd_, context);
       }
+      typed_.reset();
     }
     ImmAssociateContextEx(hwnd_, nullptr, active ? IACE_DEFAULT : 0);
     ime_on_ = active;

@@ -251,3 +251,42 @@ TEST(text_box_length_limit_and_disabled) {
   f.d.type("y");
   CHECK_EQ(f.box->text(), std::string("abcd"));
 }
+
+TEST(text_box_a_double_click_selects_the_word_under_the_pointer) {
+  // On the right half of a word's last letter, the nearest caret position is after the word;
+  // the double click still selects the word, not the space after it.
+  Fixture f(options("hello world"));
+  f.d.click(f.box);
+  f.d.key(Key::home);
+  for (int i = 0; i < 4; ++i) f.d.key(Key::right);
+  const float before_o = f.d.text_input_caret().x;
+  f.d.key(Key::right);
+  const float after_o = f.d.text_input_caret().x;
+  const Point on_o{before_o + (after_o - before_o) * 0.8f, f.box->bounds().center().y};
+  f.d.press(on_o, MouseButton::left, {}, 2);
+  f.d.release(on_o);
+  CHECK_EQ(f.selected(), std::string("hello"));
+}
+
+TEST(text_box_narrower_than_its_insets_draws_inside_itself) {
+  // In a 4-pixel column, the caret at the usual 10-pixel inset would be drawn outside the box
+  // by a repaint of everything around it, where losing focus repaints nothing, and stay there.
+  App app(headless());
+  auto win = app.open_window({"t", {200, 100}});
+  auto grid = win->add<Grid>(
+      GridOptions{.columns = {GridTrack::fixed(4), GridTrack::fit()}, .column_spacing = 20});
+  auto narrow = grid->add<TextBox>();
+  auto other = grid->add<TextBox>();
+  testing::Driver d(win);
+  d.click(narrow);
+  grid->invalidate();
+  d.frame();
+  const Rect b = narrow->bounds();
+  const int y = static_cast<int>(b.center().y);
+  const int outside = static_cast<int>(b.x + 10);  // where the caret used to go
+  const uint32_t background = d.pixel(outside, static_cast<int>(b.bottom()) + 10);
+  CHECK_EQ(d.pixel(outside, y), background);
+  d.click(other);
+  d.frame();
+  CHECK_EQ(d.pixel(outside, y), background);
+}

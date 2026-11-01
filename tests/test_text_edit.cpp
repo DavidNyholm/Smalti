@@ -3,12 +3,14 @@
 // step, and undo and redo taken all the way back and forth.
 #include <algorithm>
 #include <cstdio>
+#include <new>
 #include <random>
 #include <string>
 
 #include "check.hpp"
 #include "platform/text_input.hpp"
 #include "render/text.hpp"
+#include "support.hpp"
 #include "widgets/text_edit.hpp"
 
 using smalti::detail::one_line;
@@ -162,6 +164,96 @@ TEST(text_edit_undo_groups_typing_into_words) {
   CHECK_EQ(e.caret(), size_t{13});
   e.type("z");
   CHECK(!e.redo());
+}
+
+TEST(text_edit_a_phrase_typed_at_once_undoes_by_words) {
+  // An input method commits a phrase as one piece of text; undo takes it back word by word,
+  // as if it had been typed a key at a time.
+  TextEdit e;
+  CHECK(e.type("one two  three"));
+  CHECK(e.undo());
+  CHECK_EQ(e.text(), std::string("one two  "));
+  CHECK(e.undo());
+  CHECK_EQ(e.text(), std::string("one "));
+  CHECK(e.undo());
+  CHECK_EQ(e.text(), std::string(""));
+  CHECK(e.redo());
+  CHECK(e.redo());
+  CHECK(e.redo());
+  CHECK_EQ(e.text(), std::string("one two  three"));
+  // The first word still joins the step before it, as a key would.
+  TextEdit f = typed("ab");
+  f.type("cd ef");
+  CHECK(f.undo());
+  CHECK_EQ(f.text(), std::string("abcd "));
+}
+
+namespace {
+
+bool valid_utf8(std::string_view s) {
+  for (size_t i = 0; i < s.size();) {
+    if (smalti::detail::next_codepoint(s, i) == 0xFFFD) return false;
+  }
+  return true;
+}
+
+// Whether redoing to the end of the history, undoing all the way and redoing all the way again
+// keeps the text valid UTF-8 and comes back to the same end: the history's byte offsets agree
+// with the text.
+bool history_agrees(TextEdit& e) {
+  bool ok = valid_utf8(e.text());
+  while (e.redo()) ok = ok && valid_utf8(e.text());
+  const std::string end = e.text();
+  while (e.undo()) ok = ok && valid_utf8(e.text());
+  while (e.redo()) ok = ok && valid_utf8(e.text());
+  return ok && e.text() == end;
+}
+
+}  // namespace
+
+TEST(text_edit_running_out_of_memory_leaves_text_and_history_agreeing) {
+  // Each allocation an edit makes fails in turn. The edit then either happened or did not, and
+  // the history still matches the text: an undo step left pointing at the old text would cut
+  // a character in two. Steps of e-acute after a long text put every offset next to one.
+  constexpr size_t kFailFrom = 24;  // see alloc_count::FailOne
+  const std::string start = std::string(40, 'x') + kEAcute;
+  for (const int steps : {1, 15, 16, 17}) {  // the history full, and not, at its first doubling
+    for (long long skip = 0;; ++skip) {
+      TextEdit e;
+      e.set_text(start);
+      for (int i = 0; i < steps; ++i) {
+        e.type(kEAcute);
+        e.break_step();
+      }
+      e.move_home(false);
+      const std::string before = e.text();
+      bool threw = false, failed = false;
+      {
+        const alloc_count::FailOne fail(skip, kFailFrom);
+        try {
+          e.type("X");
+        } catch (const std::bad_alloc&) {
+          threw = true;
+        }
+        failed = fail.failed();
+      }
+      CHECK(threw ? e.text() == before : e.text() == "X" + before);
+      CHECK(history_agrees(e));
+      // Undo and redo, failing in turn too.
+      bool undo_threw = false;
+      {
+        const alloc_count::FailOne fail(skip, kFailFrom);
+        try {
+          e.undo();
+        } catch (const std::bad_alloc&) {
+          undo_threw = true;
+        }
+      }
+      CHECK(valid_utf8(e.text()));
+      CHECK(history_agrees(e));
+      if (!failed && !undo_threw) break;  // past the last allocation: every point was tried
+    }
+  }
 }
 
 TEST(text_edit_a_caret_move_ends_the_typing_step) {

@@ -27,6 +27,7 @@ class HeadlessWindow final : public NativeWindow {
   void capture_mouse(bool) override {}
   void set_dark_frame(bool) override {}
   void set_text_input(bool active, RectI caret) override {
+    if (active && !text_input_) ++text_input_sessions_;
     text_input_ = active;
     caret_ = caret;
   }
@@ -42,6 +43,7 @@ class HeadlessWindow final : public NativeWindow {
   Cursor cursor() const { return cursor_; }
   bool text_input() const { return text_input_; }
   RectI text_caret() const { return caret_; }
+  int text_input_sessions() const { return text_input_sessions_; }
 
  private:
   HeadlessBackend& backend_;
@@ -53,6 +55,7 @@ class HeadlessWindow final : public NativeWindow {
   Cursor cursor_ = Cursor::arrow;
   bool text_input_ = false;
   RectI caret_{};
+  int text_input_sessions_ = 0;
 };
 
 class HeadlessBackend final : public PlatformBackend {
@@ -71,7 +74,7 @@ class HeadlessBackend final : public PlatformBackend {
   SystemInfo system_info() const override { return {}; }  // dark, motion on, caret blinks
   // A real watch on a real file, read without blocking whenever the fake clock moves or a
   // test calls poll_file_watch(): tests can save a file and see it reload.
-  void watch_file(const std::filesystem::path& file, Callback<void()> changed) override {
+  void watch_file(const std::filesystem::path& file, Callback<void(bool)> changed) override {
     watched_.start(file, std::move(changed));
   }
   void stop_watching_file() override { watched_.stop(); }
