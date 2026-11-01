@@ -537,13 +537,15 @@ std::string X11Window::typed(XKeyEvent& key) {
     text.resize(static_cast<size_t>(std::max(n, 0)));
     return text;
   }
-  // No input method: the key's own character, without dead keys. XLookupString gives Latin-1
-  // with Ctrl applied (Ctrl+A is 0x01, which the caller drops as a control); a key beyond
-  // Latin-1 gives nothing there, and is read from its Unicode keysym unless Ctrl is held.
+  // No input method: the key's own character, without dead keys. A key with Ctrl is a shortcut
+  // and types nothing (Ctrl+1 would otherwise type "1"), as on Windows; AltGr is not Ctrl.
+  // XLookupString gives Latin-1; a key beyond Latin-1 gives nothing there, and is read from
+  // its Unicode keysym.
+  if (key.state & ControlMask) return {};
   char latin1[8];
   const int n = XLookupString(&key, latin1, sizeof latin1, &sym, nullptr);
   if (n > 0) return detail::utf8_of_latin1(std::string_view(latin1, static_cast<size_t>(n)));
-  if ((sym & 0xFF000000) == kUnicodeKeysym && !(key.state & ControlMask)) {
+  if ((sym & 0xFF000000) == kUnicodeKeysym) {
     return detail::utf8_of(static_cast<uint32_t>(sym & 0x00FFFFFF));
   }
   return {};
@@ -652,7 +654,9 @@ SystemInfo X11Backend::system_info() const {
 }
 
 void X11Backend::pump_events() {
-  while (XPending(display_) > 0) {
+  // What is queued now, not what arrives meanwhile: a client that keeps sending events must not
+  // keep timers, posted work and frames from their turn. The rest waits for the next round.
+  for (int queued = XPending(display_); queued > 0; --queued) {
     XEvent e;
     XNextEvent(display_, &e);
     // The input method sees every event first, and keeps those it uses (a dead key, a key
@@ -678,7 +682,9 @@ void X11Backend::run() {
     int64_t due = host_.next_deadline_ns();
     for (X11Window* w : windows_) due = std::min(due, w->next_frame_due());
     if (clipboard_) due = std::min(due, clipboard_->next_deadline_ns());
-    const int timeout_ms = poll_timeout_ms(due, now_ns());
+    // Events Xlib has already read wait in its queue, where poll() cannot see them.
+    const int timeout_ms =
+        XEventsQueued(display_, QueuedAlready) > 0 ? 0 : poll_timeout_ms(due, now_ns());
     XFlush(display_);
     // poll() skips a negative descriptor: the third entry is unused without a watched file.
     pollfd fds[3] = {{x_fd, POLLIN, 0},

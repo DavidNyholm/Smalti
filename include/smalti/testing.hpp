@@ -51,8 +51,9 @@ class Driver {
   // where its windows go: the caret, in logical pixels.
   bool text_input_active() const;
   Rect text_input_caret() const;
-  // How many times the input method was switched on: each text widget that gains focus gets a
-  // session of its own, so what was being composed for the last one is dropped.
+  // How many times the window's input method was switched on. Focus moving from one text
+  // widget to another switches it off and on, which is what makes a real input method drop
+  // what was being composed for the first (the headless backend composes nothing itself).
   int text_input_sessions() const;
 
  private:

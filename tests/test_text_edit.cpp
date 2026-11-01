@@ -3,6 +3,7 @@
 // step, and undo and redo taken all the way back and forth.
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <new>
 #include <random>
 #include <string>
@@ -211,48 +212,65 @@ bool history_agrees(TextEdit& e) {
 
 }  // namespace
 
-TEST(text_edit_running_out_of_memory_leaves_text_and_history_agreeing) {
-  // Each allocation an edit makes fails in turn. The edit then either happened or did not, and
-  // the history still matches the text: an undo step left pointing at the old text would cut
-  // a character in two. Steps of e-acute after a long text put every offset next to one.
-  constexpr size_t kFailFrom = 24;  // see alloc_count::FailOne
-  const std::string start = std::string(40, 'x') + kEAcute;
-  for (const int steps : {1, 15, 16, 17}) {  // the history full, and not, at its first doubling
-    for (long long skip = 0;; ++skip) {
-      TextEdit e;
-      e.set_text(start);
-      for (int i = 0; i < steps; ++i) {
-        e.type(kEAcute);
-        e.break_step();
+namespace {
+
+// A field holding a long text and `steps` undo steps that each typed an e-acute after it, the
+// caret at the start: an undo step left pointing at the old text would cut a character in two.
+TextEdit field_with_steps(int steps) {
+  TextEdit e;
+  e.set_text(std::string(40, 'x') + kEAcute);
+  for (int i = 0; i < steps; ++i) {
+    e.type(kEAcute);
+    e.break_step();
+  }
+  e.move_home(false);
+  return e;
+}
+
+// Runs `edit` on a field made by `make`, failing each allocation it makes in turn (those of at
+// least 24 bytes: see alloc_count::FailOne). The edit must happen whole or not at all, and the
+// history must still agree with the text.
+void check_each_failure(const std::function<TextEdit()>& make,
+                        const std::function<void(TextEdit&)>& edit) {
+  constexpr size_t kFailFrom = 24;
+  TextEdit reference = make();
+  edit(reference);
+  for (long long skip = 0;; ++skip) {
+    TextEdit e = make();
+    const std::string before = e.text();
+    bool threw = false, failed = false;
+    {
+      const alloc_count::FailOne fail(skip, kFailFrom);
+      try {
+        edit(e);
+      } catch (const std::bad_alloc&) {
+        threw = true;
       }
-      e.move_home(false);
-      const std::string before = e.text();
-      bool threw = false, failed = false;
-      {
-        const alloc_count::FailOne fail(skip, kFailFrom);
-        try {
-          e.type("X");
-        } catch (const std::bad_alloc&) {
-          threw = true;
-        }
-        failed = fail.failed();
-      }
-      CHECK(threw ? e.text() == before : e.text() == "X" + before);
-      CHECK(history_agrees(e));
-      // Undo and redo, failing in turn too.
-      bool undo_threw = false;
-      {
-        const alloc_count::FailOne fail(skip, kFailFrom);
-        try {
-          e.undo();
-        } catch (const std::bad_alloc&) {
-          undo_threw = true;
-        }
-      }
-      CHECK(valid_utf8(e.text()));
-      CHECK(history_agrees(e));
-      if (!failed && !undo_threw) break;  // past the last allocation: every point was tried
+      failed = fail.failed();
     }
+    CHECK(threw ? e.text() == before : e.text() == reference.text());
+    CHECK(history_agrees(e));
+    if (!failed) return;  // past the last allocation: every point was tried
+  }
+}
+
+}  // namespace
+
+TEST(text_edit_running_out_of_memory_leaves_text_and_history_agreeing) {
+  for (const int steps : {1, 15, 16, 17}) {  // the history full, and not, at its first doubling
+    const auto make = [steps] { return field_with_steps(steps); };
+    check_each_failure(make, [](TextEdit& e) { e.type("X"); });
+    // A phrase is several undo steps, made at once.
+    check_each_failure(make, [](TextEdit& e) { e.type("X " + std::string(40, 'Y')); });
+    // Undo on a history never undone before, and redo on one never redone.
+    check_each_failure(make, [](TextEdit& e) { e.undo(); });
+    check_each_failure(
+        [steps] {
+          TextEdit e = field_with_steps(steps);
+          e.undo();
+          return e;
+        },
+        [](TextEdit& e) { e.redo(); });
   }
 }
 

@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -77,13 +78,15 @@ class TextEdit {
     StepKind kind = StepKind::other;
   };
 
-  // Replaces `length` bytes at `at` with `added` (already one line), records the step, and puts
-  // the caret after the new text.
-  void replace(size_t at, size_t length, std::string_view added, StepKind kind);
+  // Replaces `length` bytes at `at` with `added` (already one line), records the step (a step
+  // for each word that starts at one of `word_starts`, offsets into `added`), and puts the
+  // caret after the new text. All or nothing: running out of memory changes nothing.
+  void replace(size_t at, size_t length, std::string_view added, StepKind kind,
+               std::span<const size_t> word_starts = {});
   bool merges(const Step& step) const;
   std::string merged_text(const Step& step) const;
-  void absorb(const Step& step, std::string merged);  // allocates nothing
-  static void room_for_one(std::vector<Step>& steps);
+  void absorb(const Step& step, std::string merged);            // allocates nothing
+  static void room_for(std::vector<Step>& steps, size_t more);  // capacity for `more`
   std::string fit(std::string_view added) const;  // cut to what the limit leaves room for
   size_t next(size_t byte) const;
   size_t prev(size_t byte) const;

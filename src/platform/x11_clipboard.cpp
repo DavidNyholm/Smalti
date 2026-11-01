@@ -187,7 +187,9 @@ bool X11Clipboard::wait_for(XEvent& out, int64_t give_up, Match match) {
       if (now_ns() >= give_up) return false;  // a steady stream of other events counts too
       if (match(out)) return true;
       handle(out);
-      deadline = std::min(now_ns() + kAnswerWaitNs, give_up);  // the other side is still there
+      // Serving a request is progress (a clipboard manager taking the text); other events, a
+      // property someone keeps changing, do not stretch the silence.
+      if (out.type == SelectionRequest) deadline = std::min(now_ns() + kAnswerWaitNs, give_up);
     }
     const int64_t left = deadline - now_ns();
     if (left <= 0) return false;
@@ -219,12 +221,16 @@ Time X11Clipboard::server_time() {
 
 // Asks the owner for the clipboard as `target`, and reads its answer into `out` as UTF-8.
 X11Clipboard::Got X11Clipboard::request(Atom target, int64_t give_up, std::string& out) {
+  // Timed with the server's clock, which owners echo (ICCCM 2.2): a late answer to an earlier
+  // paste, given up on, then has another time and is not taken for this one's.
+  const Time time = server_time();
   XDeleteProperty(display_, window_, atoms_.transfer);
-  XConvertSelection(display_, atoms_.clipboard, target, atoms_.transfer, window_, CurrentTime);
+  XConvertSelection(display_, atoms_.clipboard, target, atoms_.transfer, window_, time);
   XEvent e;
   const bool answered = wait_for(e, give_up, [&](const XEvent& ev) {
     return ev.type == SelectionNotify && ev.xselection.selection == atoms_.clipboard &&
-           ev.xselection.target == target;
+           ev.xselection.target == target &&
+           (ev.xselection.time == time || ev.xselection.time == CurrentTime);
   });
   if (!answered) return Got::failed;
   if (e.xselection.property == None) return Got::refused;
@@ -297,8 +303,8 @@ X11Clipboard::Got X11Clipboard::decode(const Property& p, std::string& out) cons
 }
 
 void X11Clipboard::answer(const XSelectionRequestEvent& request) {
+  drop_stalled_transfers();  // first: under its own trap, whose errors are not this answer's
   ErrorTrap trap(display_);
-  drop_stalled_transfers();
   // An obsolete requestor names no property: the target is the property then (ICCCM 2.2).
   const Atom property = request.property != None ? request.property : request.target;
   // A request timed before the App took the clipboard asked for what was there then
@@ -323,15 +329,25 @@ void X11Clipboard::answer(const XSelectionRequestEvent& request) {
   r.property = served ? property : None;
   r.time = request.time;
   XSendEvent(display_, request.requestor, False, NoEventMask, &reply);
-  if (trap.failed()) {  // the requestor is gone: it will ask for no piece
-    for (auto t = outgoing_.begin(); t != outgoing_.end();) {
-      t = t->requestor == request.requestor ? outgoing_.erase(t) : t + 1;
+  if (trap.failed()) {  // the requestor is gone, or broken: no piece will be asked for
+    for (auto t = std::find_if(outgoing_.begin(), outgoing_.end(),
+                               [&](const Outgoing& o) { return o.requestor == request.requestor; });
+         t != outgoing_.end();
+         t = std::find_if(outgoing_.begin(), outgoing_.end(),
+                          [&](const Outgoing& o) { return o.requestor == request.requestor; })) {
+      stop_sending(t);
     }
   }
 }
 
 // Puts the owned text on the requestor's property as `target`; false for a target not offered.
 bool X11Clipboard::serve(::Window requestor, Atom target, Atom property) {
+  // A new answer into a property replaces a transfer still under way into it, whatever the
+  // answer is: the old one's next piece would land on top of it.
+  const auto same = std::find_if(outgoing_.begin(), outgoing_.end(), [&](const Outgoing& o) {
+    return o.requestor == requestor && o.property == property;
+  });
+  if (same != outgoing_.end()) stop_sending(same);
   if (target == atoms_.targets) {
     const Atom offered[] = {atoms_.targets,     atoms_.multiple, atoms_.timestamp,
                             atoms_.utf8_string, atoms_.text,     XA_STRING};
@@ -387,11 +403,6 @@ bool X11Clipboard::serve_multiple(::Window requestor, Atom property) {
 // announces its size. False if it cannot be sent. Under the ErrorTrap of answer().
 bool X11Clipboard::send(::Window requestor, Atom property, Atom type,
                         const std::shared_ptr<const std::string>& data) {
-  // A new request for the same property replaces one still in progress, whatever its size.
-  const auto same = std::find_if(outgoing_.begin(), outgoing_.end(), [&](const Outgoing& o) {
-    return o.requestor == requestor && o.property == property;
-  });
-  if (same != outgoing_.end()) stop_sending(same);
   if (data->size() <= max_piece_) {
     XChangeProperty(display_, requestor, property, type, 8, PropModeReplace, bytes_of(data->data()),
                     static_cast<int>(data->size()));
@@ -404,15 +415,17 @@ bool X11Clipboard::send(::Window requestor, Atom property, Atom type,
   long restore_mask = NoEventMask;
   const auto other = std::find_if(outgoing_.begin(), outgoing_.end(),
                                   [&](const Outgoing& o) { return o.requestor == requestor; });
-  if (other != outgoing_.end()) {
+  const bool first_to_it = other == outgoing_.end();
+  if (!first_to_it) {
     restore_mask = other->restore_mask;
   } else {
     XWindowAttributes attributes;
     if (!XGetWindowAttributes(display_, requestor, &attributes)) return false;  // gone
     restore_mask = attributes.your_event_mask;
-    XSelectInput(display_, requestor, restore_mask | PropertyChangeMask);
   }
+  // Recorded before the mask changes: running out of memory here leaves nothing to undo.
   outgoing_.push_back({requestor, property, type, data, 0, now_ns(), restore_mask});
+  if (first_to_it) XSelectInput(display_, requestor, restore_mask | PropertyChangeMask);
   const long size = static_cast<long>(data->size());
   XChangeProperty(display_, requestor, property, atoms_.incr, 32, PropModeReplace, bytes_of(&size),
                   1);

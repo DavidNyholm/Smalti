@@ -2,6 +2,8 @@
 #include "widgets/text_edit.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <iterator>
 #include <utility>
 
 #include "platform/text_input.hpp"
@@ -97,22 +99,17 @@ bool TextEdit::type(std::string_view utf8) {
   const std::string added = fit(one_line(utf8));
   if (added.empty()) return false;  // nothing to type, or no room for it
   // Each word typed after a space is an undo step of its own, however the text arrives: a key
-  // at a time, or a whole phrase from an input method at once. So the text goes in by words.
-  const std::string_view text = added;
-  size_t start = 0;
+  // at a time, or a whole phrase from an input method at once.
+  std::vector<size_t> word_starts;
   CharKind before = CharKind::word;
-  for (size_t i = 0; i < text.size();) {
+  for (size_t i = 0; i < added.size();) {
     const size_t at = i;
-    const CharKind kind = kind_of(next_codepoint(text, i));
-    if (at > start && kind != CharKind::space && before == CharKind::space) {
-      replace(selection_start(), selection_end() - selection_start(),
-              text.substr(start, at - start), StepKind::typing);
-      start = at;
-    }
+    const CharKind kind = kind_of(next_codepoint(added, i));
+    if (at > 0 && kind != CharKind::space && before == CharKind::space) word_starts.push_back(at);
     before = kind;
   }
-  replace(selection_start(), selection_end() - selection_start(), text.substr(start),
-          StepKind::typing);
+  replace(selection_start(), selection_end() - selection_start(), added, StepKind::typing,
+          word_starts);
   return true;
 }
 
@@ -207,7 +204,7 @@ bool TextEdit::undo() {
   if (undo_.empty()) return false;
   // What may run out of memory comes before anything changes (see replace).
   text_.reserve(text_.size() - undo_.back().added.size() + undo_.back().removed.size());
-  room_for_one(redo_);
+  room_for(redo_, 1);
   Step s = std::move(undo_.back());
   undo_.pop_back();
   text_.replace(s.at, s.added.size(), s.removed);
@@ -221,7 +218,7 @@ bool TextEdit::undo() {
 bool TextEdit::redo() {
   if (redo_.empty()) return false;
   text_.reserve(text_.size() - redo_.back().removed.size() + redo_.back().added.size());
-  room_for_one(undo_);
+  room_for(undo_, 1);
   Step s = std::move(redo_.back());
   redo_.pop_back();
   text_.replace(s.at, s.removed.size(), s.added);
@@ -232,9 +229,9 @@ bool TextEdit::redo() {
   return true;
 }
 
-void TextEdit::room_for_one(std::vector<Step>& steps) {
-  if (steps.size() < steps.capacity()) return;
-  steps.reserve(std::max(kFirstStepRoom, steps.capacity() * 2));
+void TextEdit::room_for(std::vector<Step>& steps, size_t more) {
+  if (steps.size() + more <= steps.capacity()) return;
+  steps.reserve(std::max({kFirstStepRoom, steps.capacity() * 2, steps.size() + more}));
 }
 
 size_t TextEdit::word_left(size_t byte) const {
@@ -264,30 +261,51 @@ size_t TextEdit::word_right(size_t byte) const {
   return pos;
 }
 
-void TextEdit::replace(size_t at, size_t length, std::string_view added, StepKind kind) {
-  Step step;
-  step.at = at;
-  step.removed = text_.substr(at, length);
-  step.added = added;
-  step.caret_before = caret_;
-  step.anchor_before = anchor_;
-  step.caret_after = step.anchor_after = at + added.size();
-  step.kind = kind;
+void TextEdit::replace(size_t at, size_t length, std::string_view added, StepKind kind,
+                       std::span<const size_t> word_starts) {
+  // A step for each piece of `added` from one word start to the next; the first replaces the
+  // selection, and may join the last step. Every one is made before anything changes.
+  std::vector<Step> steps;
+  steps.reserve(word_starts.size() + 1);
+  for (size_t i = 0, from = 0; i <= word_starts.size(); ++i) {
+    const size_t to = i < word_starts.size() ? word_starts[i] : added.size();
+    Step step;
+    step.at = at + from;
+    if (i == 0) step.removed = text_.substr(at, length);
+    step.added = added.substr(from, to - from);
+    step.caret_before = i == 0 ? caret_ : at + from;
+    step.anchor_before = i == 0 ? anchor_ : at + from;
+    step.caret_after = step.anchor_after = at + to;
+    step.kind = kind;
+    steps.push_back(std::move(step));
+    from = to;
+  }
   // Everything that may run out of memory comes before anything changes, so a failure leaves
   // the text and its history as they were: the steps hold byte offsets into this very text.
+  // (Only the first piece can join the last step: the others start a word after a space.)
   text_.reserve(text_.size() - length + added.size());
-  const bool merging = merges(step);
-  std::string merged = merging ? merged_text(step) : std::string();
-  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);
+  const bool merging = merges(steps.front());
+  std::string merged = merging ? merged_text(steps.front()) : std::string();
+  const size_t fresh = steps.size() - (merging ? 1 : 0);
+  const size_t kept = std::min(kMaxUndoSteps, undo_.size() + fresh);
+  room_for(undo_, kept > undo_.size() ? kept - undo_.size() : 0);
   text_.replace(at, length, added);
-  caret_ = anchor_ = step.caret_after;
+  caret_ = anchor_ = at + added.size();
   redo_.clear();
-  if (merging) {
-    absorb(step, std::move(merged));
-  } else {
-    if (undo_.size() == kMaxUndoSteps) undo_.erase(undo_.begin());
-    undo_.push_back(std::move(step));
+  if (merging) absorb(steps.front(), std::move(merged));
+  // Past the limit the oldest steps are forgotten, those just made too if they alone exceed it.
+  auto first_new = steps.begin() + (merging ? 1 : 0);
+  if (undo_.size() + fresh > kMaxUndoSteps) {
+    const size_t drop = undo_.size() + fresh - kMaxUndoSteps;
+    if (drop <= undo_.size()) {
+      undo_.erase(undo_.begin(), undo_.begin() + static_cast<std::ptrdiff_t>(drop));
+    } else {
+      first_new += static_cast<std::ptrdiff_t>(drop - undo_.size());
+      undo_.clear();
+    }
   }
+  undo_.insert(undo_.end(), std::make_move_iterator(first_new),
+               std::make_move_iterator(steps.end()));
   open_ = kind != StepKind::other;
 }
 

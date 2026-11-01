@@ -915,9 +915,9 @@ MUTATIONS = [
         "text edit: a new edit keeps the redo history",
         [
             (
-                "  caret_ = anchor_ = step.caret_after;\n  redo_.clear();",
-                "  caret_ = anchor_ = step.caret_after;",
-            )
+                "  caret_ = anchor_ = at + added.size();\n  redo_.clear();",
+                "  caret_ = anchor_ = at + added.size();",
+            ),
         ],
     ),
     (
@@ -995,9 +995,9 @@ MUTATIONS = [
         "text edit: the text changes before the history has room for the step",
         [
             (
-                "  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);\n  text_.replace(at, length, added);",
-                "  text_.replace(at, length, added);\n  if (!merging && undo_.size() < kMaxUndoSteps) room_for_one(undo_);",
-            )
+                "  room_for(undo_, kept > undo_.size() ? kept - undo_.size() : 0);\n  text_.replace(at, length, added);",
+                "  text_.replace(at, length, added);\n  room_for(undo_, kept > undo_.size() ? kept - undo_.size() : 0);",
+            ),
         ],
     ),
     (
@@ -1005,9 +1005,9 @@ MUTATIONS = [
         "text edit: a phrase typed at once is one undo step",
         [
             (
-                "    if (at > start && kind != CharKind::space && before == CharKind::space) {",
-                "    if (at > start && kind != CharKind::space && before == CharKind::space && at == 0) {",
-            )
+                "    if (at > 0 && kind != CharKind::space && before == CharKind::space) word_starts.push_back(at);",
+                "    if (at > 0 && kind != CharKind::space && before == CharKind::space && at == 0) word_starts.push_back(at);",
+            ),
         ],
     ),
     (
@@ -1041,16 +1041,6 @@ MUTATIONS = [
             (
                 "th.accent.with_alpha(th.accent.a * kSelectionOpacity)",
                 "th.accent.with_alpha(kSelectionOpacity)",
-            )
-        ],
-    ),
-    (
-        "core/window.cpp",
-        "typed text: focus moving between text widgets keeps the input method's session",
-        [
-            (
-                "  if (active && text_input_active && target != text_input_target)",
-                "  if (active && text_input_active && target != text_input_target && !active)",
             )
         ],
     ),
@@ -1092,6 +1082,40 @@ MUTATIONS = [
                 "    const bool whole = sharing > 0 && covered == sharing;",
                 "    const bool whole = weights > 0 && weight / weights >= 1.0 - 1e-9;",
             )
+        ],
+    ),
+    (
+        "core/window.cpp",
+        "typed text: the input method's session ends only after the focus hooks",
+        [
+            (
+                "  if (text_input_active && native) {\n    text_input_active = false;",
+                "  if (text_input_active && native && !native) {\n    text_input_active = false;",
+            ),
+        ],
+    ),
+    (
+        "core/widget.cpp",
+        "timed redraws: disabling a widget drops its redraw",
+        [
+            (
+                "  enabled_ = enabled;\n  if (!enabled) {\n    if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);",
+                "  enabled_ = enabled;\n  if (!enabled) {\n    if (auto* ws = detail::window_state_of(*this)) {\n      ws->release_subtree(*this);\n      ws->cancel_redraws(*this);\n    }",
+            ),
+        ],
+    ),
+    (
+        "core/app.cpp",
+        "timed redraws: a removed widget's redraws are dropped before its hooks run",
+        [
+            (
+                "        --dispatch_depth;\n        ws->cancel_redraws(*w);  // after the hooks, which may ask for redraws\n",
+                "        --dispatch_depth;\n",
+            ),
+            (
+                "        ++dispatch_depth;\n        try {\n          ws->release_subtree(*w);",
+                "        ws->cancel_redraws(*w);\n        ++dispatch_depth;\n        try {\n          ws->release_subtree(*w);",
+            ),
         ],
     ),
 ]

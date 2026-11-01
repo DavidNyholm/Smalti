@@ -279,6 +279,12 @@ void WindowState::set_hovered(Widget* w) {
 void WindowState::focus(Widget* w) {
   const WidgetId id = w ? w->id() : WidgetId{};
   if (id == focused) return;
+  // The old widget's input method session ends before any hook runs: a hook may pump messages,
+  // and what was composed, or half a character typed, for the old widget must not reach w.
+  if (text_input_active && native) {
+    text_input_active = false;
+    native->set_text_input(false, {});
+  }
   Widget* old = find(focused);
   focused = id;
   if (old) old->on_focus_changed(false);
@@ -292,16 +298,9 @@ void WindowState::sync_text_input() {
   Widget* f = find(focused);
   const bool active = f && eligible(*f) && f->accepts_text();
   const RectI caret = active ? to_device(f->text_caret(), scale) : RectI{};
-  const WidgetId target = active ? f->id() : WidgetId{};
-  // Focus moving from one text widget to another ends the first one's session: what it was
-  // composing, or half a character typed for it, must not reach the next.
-  if (active && text_input_active && target != text_input_target)
-    native->set_text_input(false, {});
-  else if (active == text_input_active && caret == text_input_caret)
-    return;
+  if (active == text_input_active && caret == text_input_caret) return;
   text_input_active = active;
   text_input_caret = caret;
-  text_input_target = target;
   native->set_text_input(active, caret);
 }
 
@@ -317,9 +316,11 @@ void WindowState::cancel_press() {
   }
 }
 
-void WindowState::release_subtree(const Widget& root) {
-  // Its timed redraws go: a widget shown again asks again when it draws.
+void WindowState::cancel_redraws(const Widget& root) {
   std::erase_if(timed, [&](const auto& t) { return within(root, find(t.first)); });
+}
+
+void WindowState::release_subtree(const Widget& root) {
   if (within(root, find(pressed))) cancel_press();
   if (within(root, find(focused))) {
     if (Widget* f = find(focused)) f->invalidate();

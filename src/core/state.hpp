@@ -75,6 +75,9 @@ struct WindowState final : platform::WindowEvents {
   // Drops focus, the press and the hover from `root` and its descendants, as they are being
   // hidden, disabled or removed.
   void release_subtree(const Widget& root);
+  // Drops the timed redraws of `root` and its descendants, as they are hidden or removed (after
+  // release_subtree, whose hooks may ask for more): one shown again asks again when it draws.
+  void cancel_redraws(const Widget& root);
 
   // platform::WindowEvents
   void on_mouse_move(Point device, Modifiers mods) override;
@@ -126,7 +129,6 @@ struct WindowState final : platform::WindowEvents {
   std::vector<std::pair<WidgetId, int64_t>> timed;      // widget, when to redraw it
   bool text_input_active = false;                       // as last told to the platform
   RectI text_input_caret{};
-  WidgetId text_input_target{};  // the widget the input method is on for
 };
 
 struct AppState final : platform::BackendHost {

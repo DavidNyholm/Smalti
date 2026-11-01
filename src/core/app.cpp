@@ -94,6 +94,7 @@ void AppState::flush_removals() {
           stop_with(std::current_exception());
         }
         --dispatch_depth;
+        ws->cancel_redraws(*w);  // after the hooks, which may ask for redraws
         const Rect b = w->bounds();
         const float o = w->overflow();
         ws->invalidate({b.x - o, b.y - o, b.width + 2 * o, b.height + 2 * o});

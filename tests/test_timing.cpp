@@ -138,3 +138,44 @@ TEST(timing_a_wait_converts_to_poll_milliseconds_safely) {
   CHECK_EQ(poll_timeout_ms(int64_t{30} * 24 * 3600 * 1000 * kMs, 0), INT_MAX);
   CHECK_EQ(poll_timeout_ms(INT64_MAX - 1, -1000), INT_MAX);
 }
+
+namespace {
+
+// Asks for a distant redraw from its own hook as it loses focus.
+class AsksOnBlur : public Blinker {
+ public:
+  bool focusable() const override { return true; }
+  void on_focus_changed(bool gained) override {
+    if (!gained) ask_at(INT64_MAX - 1);
+  }
+};
+
+}  // namespace
+
+TEST(timing_a_removed_widget_keeps_no_redraw_its_hooks_asked_for) {
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  auto w = win->add<AsksOnBlur>();
+  w->blinking = false;
+  testing::Driver d(win);
+  w->focus();
+  d.idle();
+  w->remove();  // losing focus as it goes, it asks for a redraw
+  d.idle();
+  CHECK(win->state().timed.empty());
+}
+
+TEST(timing_a_disabled_widget_keeps_its_redraw) {
+  App app(headless());
+  auto win = app.open_window({"t", {100, 100}});
+  auto w = win->add<Blinker>();
+  w->blinking = false;
+  testing::Driver d(win);
+  d.idle();
+  w->ask_after(100ms);
+  w->set_enabled(false);  // still shown, so still drawn when its time comes
+  d.frame();
+  const int paints = w->paints;
+  d.advance(150ms);
+  CHECK(w->paints > paints);
+}

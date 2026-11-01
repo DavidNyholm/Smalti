@@ -109,7 +109,10 @@ void Widget::set_visible(bool visible) {
   const detail::DispatchScope scope(detail::app_state());  // the hooks below must not free this
   visible_ = visible;
   if (!visible) {
-    if (auto* ws = detail::window_state_of(*this)) ws->release_subtree(*this);
+    if (auto* ws = detail::window_state_of(*this)) {
+      ws->release_subtree(*this);
+      ws->cancel_redraws(*this);  // after the hooks, which may ask for redraws
+    }
   }
   invalidate_layout();
 }

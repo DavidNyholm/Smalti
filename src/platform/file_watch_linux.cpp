@@ -8,6 +8,7 @@
 #include <string>
 
 #include <sys/inotify.h>
+#include <sys/stat.h>
 
 #include "platform/file_watch.hpp"
 
@@ -33,23 +34,37 @@ std::string folder_text(const std::filesystem::path& folder) {
 struct FileWatch::State {
   int fd = -1;
   std::string name;  // the file's name within the folder
+  std::filesystem::path folder;
+  dev_t device = 0;  // the folder's identity: after an overflow, whether it is still the same
+  ino_t inode = 0;
+  // Whether the folder's path still leads to the folder watched. A report of it moving may be
+  // among those an overflow dropped.
+  bool still_there() const {
+    struct stat now{};
+    return stat(folder.c_str(), &now) == 0 && now.st_dev == device && now.st_ino == inode;
+  }
 };
 
 FileWatch::FileWatch(const std::filesystem::path& file) : state_(std::make_unique<State>()) {
   std::filesystem::path folder = file.parent_path();
   if (folder.empty()) folder = ".";
   state_->name = file.filename().string();
+  state_->folder = folder;
   state_->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
   if (state_->fd < 0) {
     throw std::runtime_error(std::string("cannot watch files for changes (") +
                              std::strerror(errno) + ")");
   }
-  if (inotify_add_watch(state_->fd, folder.c_str(), kEvents) < 0) {
+  struct stat identity{};
+  if (inotify_add_watch(state_->fd, folder.c_str(), kEvents) < 0 ||
+      stat(folder.c_str(), &identity) != 0) {
     const int error = errno;
     close(state_->fd);
     throw std::runtime_error("cannot watch the folder \"" + folder_text(folder) +
                              "\" for changes (" + std::strerror(error) + ")");
   }
+  state_->device = identity.st_dev;
+  state_->inode = identity.st_ino;
 }
 
 FileWatch::~FileWatch() { close(state_->fd); }
@@ -58,19 +73,19 @@ Waitable FileWatch::waitable() const { return state_->fd; }
 
 FileWatch::Report FileWatch::take_changes() {
   alignas(inotify_event) char buffer[kBufferBytes];
-  bool changed = false, ended = false;
+  bool changed = false, ended = false, overflowed = false;
   for (;;) {
     const ssize_t got = read(state_->fd, buffer, sizeof buffer);
     if (got <= 0) break;  // EAGAIN: nothing more queued
     for (ssize_t offset = 0; offset + static_cast<ssize_t>(sizeof(inotify_event)) <= got;) {
       const auto* e = reinterpret_cast<const inotify_event*>(buffer + offset);
-      if (e->mask & IN_Q_OVERFLOW) changed = true;  // may have included the file
+      if (e->mask & IN_Q_OVERFLOW) changed = overflowed = true;  // may have included the file
       if (e->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) ended = true;
       if (e->len > 0 && state_->name == e->name) changed = true;
       offset += static_cast<ssize_t>(sizeof(inotify_event) + e->len);
     }
   }
-  if (ended) return Report::ended;
+  if (ended || (overflowed && !state_->still_there())) return Report::ended;
   return changed ? Report::changed : Report::nothing;
 }
 

@@ -10,6 +10,12 @@
 #include <optional>
 #include <string>
 
+#if defined(_WIN32)
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "gallery_ui.hpp"
 
 namespace {
@@ -43,8 +49,26 @@ int run_gallery(const std::optional<std::filesystem::path>& theme_file) {
 }  // namespace
 
 #if defined(_WIN32)
+namespace {
+
+// A windowed program gets no console, so a theme's errors would go nowhere. Started from a
+// terminal, it writes them to that terminal, unless they were already sent somewhere (2> file).
+// Started from Explorer there is no terminal, and nothing to do.
+void report_to_starting_terminal() {
+  const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+  if (err != nullptr && err != INVALID_HANDLE_VALUE) return;
+  if (!AttachConsole(ATTACH_PARENT_PROCESS)) return;
+  FILE* reopened = nullptr;
+  if (freopen_s(&reopened, "CONOUT$", "w", stderr) != 0) {
+    FreeConsole();  // attached but unwritable: errors stay unshown, as without a terminal
+  }
+}
+
+}  // namespace
+
 // The wide entry point, so a theme file's name outside the system code page arrives intact.
 int wmain(int argc, wchar_t** argv) {
+  report_to_starting_terminal();
   return run_gallery(argc > 1 ? std::optional<std::filesystem::path>(argv[1]) : std::nullopt);
 }
 #else

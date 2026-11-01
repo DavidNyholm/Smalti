@@ -172,3 +172,37 @@ TEST(text_input_each_text_widget_gets_a_session_of_its_own) {
   joiner.reset();
   CHECK(joiner.push(0xDE00).empty());
 }
+
+namespace {
+
+// Records whether the input method was on while its losing-focus hook ran.
+class HookedTarget : public TextTarget {
+ public:
+  testing::Driver* driver = nullptr;
+  bool on_in_hook = false;
+  void on_focus_changed(bool gained) override {
+    if (!gained && driver) on_in_hook = driver->text_input_active();
+  }
+};
+
+}  // namespace
+
+TEST(text_input_ends_before_the_focus_hooks_run) {
+  // A hook may pump messages (a dialog): by then the old widget's session must be over, so
+  // nothing composed or half typed for it reaches the widget taking focus.
+  App app(headless());
+  auto win = app.open_window({"t", {200, 100}});
+  auto col = win->add<Column>();
+  auto a = col->add<HookedTarget>();
+  auto b = col->add<TextTarget>();
+  testing::Driver d(win);
+  a->focus();
+  d.idle();
+  CHECK(d.text_input_active());
+  a->driver = &d;
+  b->focus();
+  d.idle();
+  CHECK(!a->on_in_hook);
+  CHECK(d.text_input_active());
+  CHECK_EQ(d.text_input_sessions(), 2);
+}
