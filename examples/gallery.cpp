@@ -26,20 +26,18 @@ std::string utf8(const std::filesystem::path& p) {
 }
 
 int run_gallery(const std::optional<std::filesystem::path>& theme_file) {
-  bool failed = false;  // declared before the App, whose error handler refers to it
   sm::App app;
   std::optional<gallery::FileTheme> file;
   if (theme_file) {
     const std::string shown = utf8(*theme_file);
-    app.on_theme_error([&failed, shown](std::span<const sm::ThemeError> errors) {
-      failed = true;
+    app.on_theme_error([shown](std::span<const sm::ThemeError> errors) {
       for (const sm::ThemeError& e : errors) {
         std::fprintf(stderr, "%s:%d:%d: %s\n", shown.c_str(), e.line, e.column, e.message.c_str());
       }
     });
     app.watch_theme(*theme_file);
-    const std::string stem = utf8(theme_file->stem());
-    file = gallery::FileTheme{failed ? stem : app.theme().name, *theme_file};
+    // Listed by its file name: a file copied from a built-in theme keeps that theme's name.
+    file = gallery::FileTheme{utf8(theme_file->filename()), *theme_file};
   }
   auto win = app.open_window({"smalti gallery", {1100, 720}});
   gallery::build(app, win, file ? &*file : nullptr);
